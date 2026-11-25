@@ -1,0 +1,4684 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mimimi — Music &amp; Lyrics Player</title>
+  <style>
+    :root {
+      --bg-app: #0c0f14;
+      --bg-surface: #141922;
+      --bg-elevated: #1c222e;
+      --bg-hover: #252c3b;
+      --text-main: #f3f5f8;
+      --text-sub: #98a2b3;
+      --border-color: #273040;
+      --accent-color: #e05a3e;
+      --accent-hover: #f06a4e;
+      --accent-soft: rgba(224, 90, 62, 0.16);
+      --accent-ink: #ffffff;
+      --sung-color: #34d399;
+      --lyric-size: 1.08rem;
+      --radius-lg: 12px;
+      --radius-md: 9px;
+      --radius-sm: 6px;
+      --ease-out-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    body[data-theme="coral"] {
+      --accent-color: #e05a3e;
+      --accent-hover: #f06a4e;
+      --accent-soft: rgba(224, 90, 62, 0.16);
+    }
+
+    body[data-theme="ocean"] {
+      --accent-color: #3898ec;
+      --accent-hover: #58abff;
+      --accent-soft: rgba(56, 152, 236, 0.16);
+    }
+
+    body[data-theme="mint"] {
+      --accent-color: #26a67a;
+      --accent-hover: #38be90;
+      --accent-soft: rgba(38, 166, 122, 0.16);
+    }
+
+    body[data-theme="amber"] {
+      --accent-color: #d69428;
+      --accent-hover: #eaab3d;
+      --accent-soft: rgba(214, 148, 40, 0.18);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg-app);
+      color: var(--text-main);
+      font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.45;
+      overflow: hidden;
+    }
+
+    @media (max-width: 960px) {
+      html, body {
+        overflow: auto;
+      }
+    }
+
+    .no-scrollbar {
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    @keyframes panelFadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(7px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes chipPopIn {
+      from {
+        opacity: 0;
+        transform: scale(0.9) translateY(3px);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+
+    /* イントロ動画オーバーレイ */
+    .intro-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: #07090d;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      transition: opacity 0.4s var(--ease-out-smooth), visibility 0.4s var(--ease-out-smooth);
+    }
+
+    .intro-overlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .intro-video-wrap {
+      width: min(92vw, 920px);
+      max-height: 74vh;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+      border: 1px solid var(--border-color);
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .intro-video {
+      width: 100%;
+      max-height: 74vh;
+      display: block;
+      object-fit: contain;
+      background: #000;
+    }
+
+    .intro-controls {
+      margin-top: 14px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .intro-btn {
+      background: var(--bg-elevated);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      padding: 7px 14px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: transform 0.16s var(--ease-out-smooth), background 0.16s ease, border-color 0.16s ease;
+    }
+
+    .intro-btn:active {
+      transform: scale(0.96);
+    }
+
+    .intro-btn.primary {
+      background: var(--accent-color);
+      border-color: var(--accent-color);
+      color: var(--accent-ink);
+      font-weight: 700;
+    }
+
+    .intro-status-note {
+      margin-top: 8px;
+      font-size: 0.76rem;
+      color: var(--text-sub);
+      text-align: center;
+    }
+
+    /* 1画面フィットレイアウト */
+    .app-shell {
+      width: 100%;
+      height: 100dvh;
+      max-width: 1560px;
+      margin: 0 auto;
+      padding: 10px 14px;
+      display: grid;
+      grid-template-rows: 42px minmax(0, 1fr);
+      gap: 10px;
+    }
+
+    @media (max-width: 960px) {
+      .app-shell {
+        height: auto;
+        min-height: 100dvh;
+        grid-template-rows: auto auto;
+        overflow: visible;
+      }
+    }
+
+    /* 最上段ヘッダー（左上にmimimiロゴ） */
+    .top-header {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 0 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 42px;
+    }
+
+    .brand-logo-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-logo {
+      font-size: 1.15rem;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      color: var(--accent-color);
+      transition: color 0.25s ease;
+    }
+
+    .brand-tagline {
+      font-size: 0.7rem;
+      color: var(--text-sub);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .small-ghost-btn {
+      background: var(--bg-elevated);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 3px 9px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.14s var(--ease-out-smooth);
+    }
+
+    .small-ghost-btn:hover,
+    .small-ghost-btn.active {
+      background: var(--bg-hover);
+      border-color: var(--accent-color);
+      color: var(--accent-hover);
+    }
+
+    .small-ghost-btn:active {
+      transform: scale(0.95);
+    }
+
+    /* メイン2カラム領域 */
+    .main-grid {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 350px minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    @media (max-width: 960px) {
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      min-height: 0;
+      transition: border-color 0.2s ease;
+    }
+
+    /* 左ペイン：1画面内に収まるコンパクトプレイヤー */
+    .player-pane {
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 7px;
+      overflow: hidden;
+    }
+
+    @media (max-width: 960px) {
+      .player-pane {
+        overflow: visible;
+        gap: 10px;
+      }
+    }
+
+    .drop-zone {
+      border: 1px dashed #374357;
+      border-radius: var(--radius-sm);
+      padding: 6px 8px;
+      background: var(--bg-app);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      flex-wrap: wrap;
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+
+    .drop-zone.dragover {
+      border-color: var(--accent-color);
+      background: var(--accent-soft);
+    }
+
+    .drop-zone-text {
+      font-size: 0.68rem;
+      color: var(--text-sub);
+    }
+
+    .import-btn-group {
+      display: flex;
+      gap: 5px;
+    }
+
+    .import-btn {
+      background: var(--bg-elevated);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 3px 8px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.14s var(--ease-out-smooth), background 0.16s ease, border-color 0.16s ease;
+    }
+
+    .import-btn:active {
+      transform: scale(0.95);
+    }
+
+    .import-btn.primary {
+      background: var(--accent-color);
+      border-color: var(--accent-color);
+      color: var(--accent-ink);
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    .now-playing-top {
+      display: grid;
+      grid-template-columns: 76px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+    }
+
+    .cover-art {
+      width: 76px;
+      height: 76px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-elevated);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9rem;
+      font-weight: 800;
+      color: var(--text-sub);
+      border: 1px solid var(--border-color);
+      overflow: hidden;
+      flex-shrink: 0;
+      transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .cover-art img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.8s var(--ease-out-smooth);
+    }
+
+    @keyframes gentleArtworkDrift {
+      0% { transform: scale(1) translateY(0); }
+      50% { transform: scale(1.05) translateY(-2px); }
+      100% { transform: scale(1) translateY(0); }
+    }
+
+    .cover-art.ambient-motion img {
+      animation: gentleArtworkDrift 6s ease-in-out infinite;
+    }
+
+    .track-meta {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .track-folder {
+      font-size: 0.68rem;
+      color: var(--accent-color);
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: color 0.25s ease;
+    }
+
+    .track-title {
+      font-size: 0.92rem;
+      font-weight: 800;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .track-status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+      font-size: 0.68rem;
+      color: var(--text-sub);
+      margin-top: 2px;
+    }
+
+    .utility-strip {
+      display: flex;
+      gap: 4px;
+    }
+
+    .like-btn {
+      background: var(--bg-elevated);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 2px 7px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.14s var(--ease-out-smooth), background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+    }
+
+    .like-btn:active {
+      transform: scale(0.94);
+    }
+
+    .like-btn.liked {
+      background: var(--accent-soft);
+      border-color: var(--accent-color);
+      color: var(--accent-hover);
+    }
+
+    .bookmark-bar {
+      background: var(--bg-app);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 5px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .bookmark-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.68rem;
+      color: var(--text-sub);
+      font-weight: 700;
+    }
+
+    .bookmark-chips {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      max-height: 22px;
+      overflow: hidden;
+      align-items: center;
+    }
+
+    .bookmark-chip {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      border-radius: 999px;
+      padding: 1px 7px;
+      font-size: 0.66rem;
+      font-weight: 700;
+      cursor: pointer;
+      animation: chipPopIn 0.24s var(--ease-out-smooth) both;
+      transition: border-color 0.16s ease, transform 0.14s var(--ease-out-smooth);
+    }
+
+    .bookmark-chip:hover {
+      border-color: var(--accent-color);
+    }
+
+    .bookmark-chip:active {
+      transform: scale(0.94);
+    }
+
+    .viz-box {
+      background: var(--bg-app);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 5px 8px;
+    }
+
+    .viz-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2px;
+      font-size: 0.65rem;
+      color: var(--text-sub);
+      font-weight: 700;
+    }
+
+    canvas.viz-canvas {
+      width: 100%;
+      height: 36px;
+      display: block;
+    }
+
+    .seek-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 4px;
+      background: var(--bg-elevated);
+      border-radius: 999px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent-color);
+      border: 2px solid var(--text-main);
+      cursor: pointer;
+      transition: transform 0.15s var(--ease-out-smooth), background 0.2s ease;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.22);
+    }
+
+    .time-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.68rem;
+      color: var(--text-sub);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .main-controls {
+      display: grid;
+      grid-template-columns: 1fr 1.4fr 1fr;
+      gap: 6px;
+    }
+
+    .ctrl-btn {
+      background: var(--bg-elevated);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 6px 4px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.16s ease, transform 0.14s var(--ease-out-smooth), border-color 0.16s ease;
+    }
+
+    .ctrl-btn:hover {
+      background: var(--bg-hover);
+    }
+
+    .ctrl-btn:active {
+      transform: scale(0.95);
+    }
+
+    .ctrl-btn.primary {
+      background: var(--accent-color);
+      border-color: var(--accent-color);
+      color: var(--accent-ink);
+    }
+
+    .mode-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .mode-btn {
+      background: var(--bg-app);
+      color: var(--text-sub);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 4px 6px;
+      font-size: 0.69rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease, transform 0.14s var(--ease-out-smooth);
+    }
+
+    .mode-btn:active {
+      transform: scale(0.96);
+    }
+
+    .mode-btn.active {
+      color: var(--accent-hover);
+      border-color: var(--accent-color);
+      background: var(--accent-soft);
+    }
+
+    .ab-box {
+      background: var(--bg-app);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 5px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .ab-top {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.67rem;
+      color: var(--text-sub);
+      font-weight: 700;
+    }
+
+    .ab-btns {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1.2fr;
+      gap: 4px;
+    }
+
+    .volume-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .icon-btn {
+      background: var(--bg-elevated);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 4px 8px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: transform 0.14s var(--ease-out-smooth), background 0.16s ease;
+    }
+
+    .icon-btn:active {
+      transform: scale(0.95);
+    }
+
+    .rate-pitch-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 5px;
+    }
+
+    .extra-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .select-box {
+      background: var(--bg-app);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 4px 7px;
+      font-size: 0.72rem;
+      outline: none;
+      transition: border-color 0.18s ease;
+    }
+
+    .select-box:focus {
+      border-color: var(--accent-color);
+    }
+
+    .status-banner {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      background: var(--accent-soft);
+      border: 1px solid var(--accent-color);
+      border-radius: var(--radius-sm);
+      padding: 4px 8px;
+      font-size: 0.69rem;
+      font-weight: 700;
+      animation: chipPopIn 0.24s var(--ease-out-smooth) both;
+    }
+
+    /* 右ペイン：画面右側にモード切替ボタンを集約 */
+    .content-pane {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .right-nav-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border-color);
+      flex-wrap: wrap;
+      flex-shrink: 0;
+    }
+
+    .mode-switcher-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .nav-mode-btn {
+      background: var(--bg-surface);
+      color: var(--text-sub);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 5px 12px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.18s var(--ease-out-smooth);
+    }
+
+    .nav-mode-btn:hover {
+      color: var(--text-main);
+      border-color: #3c485e;
+      transform: translateY(-1px);
+    }
+
+    .nav-mode-btn:active {
+      transform: scale(0.96);
+    }
+
+    .nav-mode-btn.active {
+      background: var(--accent-color);
+      border-color: var(--accent-color);
+      color: var(--accent-ink);
+    }
+
+    .tab-panel {
+      display: none;
+      flex: 1;
+      min-height: 0;
+      flex-direction: column;
+      padding: 12px 14px;
+      gap: 10px;
+      overflow: hidden;
+    }
+
+    .tab-panel.active {
+      display: flex;
+      animation: panelFadeIn 0.26s var(--ease-out-smooth) both;
+    }
+
+    /* 歌詞ツールバー */
+    .lyrics-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-color);
+      flex-shrink: 0;
+    }
+
+    .lyrics-toolbar-left,
+    .lyrics-toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .theme-swatches {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--bg-app);
+      border: 1px solid var(--border-color);
+      padding: 2px 6px;
+      border-radius: 999px;
+    }
+
+    .theme-btn {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: transform 0.18s var(--ease-out-smooth), border-color 0.18s ease;
+    }
+
+    .theme-btn[data-theme="coral"] { background: #e05a3e; }
+    .theme-btn[data-theme="ocean"] { background: #3898ec; }
+    .theme-btn[data-theme="mint"] { background: #26a67a; }
+    .theme-btn[data-theme="amber"] { background: #d69428; }
+
+    .theme-btn:hover {
+      transform: scale(1.18);
+    }
+
+    .theme-btn.active {
+      border-color: var(--text-main);
+      transform: scale(1.15);
+    }
+
+    .color-picker-mini {
+      width: 18px;
+      height: 18px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .font-size-group {
+      display: inline-flex;
+      background: var(--bg-app);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+
+    .font-size-btn {
+      background: transparent;
+      color: var(--text-sub);
+      border: none;
+      padding: 3px 7px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s var(--ease-out-smooth), color 0.2s ease, transform 0.14s var(--ease-out-smooth);
+    }
+
+    .font-size-btn:active {
+      transform: scale(0.92);
+    }
+
+    .font-size-btn.active {
+      background: var(--accent-color);
+      color: var(--accent-ink);
+    }
+
+    .lyrics-badge {
+      font-size: 0.7rem;
+      color: var(--accent-hover);
+      background: var(--accent-soft);
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 700;
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+
+    .offset-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      background: var(--bg-app);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 2px 6px;
+      font-size: 0.69rem;
+      font-weight: 700;
+    }
+
+    .offset-btn {
+      background: var(--bg-elevated);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.14s var(--ease-out-smooth), background 0.15s ease;
+    }
+
+    .offset-btn:active {
+      transform: scale(0.92);
+    }
+
+    .action-btn {
+      background: var(--bg-elevated);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 4px 9px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.14s var(--ease-out-smooth);
+    }
+
+    .action-btn:hover {
+      background: var(--bg-hover);
+    }
+
+    .action-btn:active {
+      transform: scale(0.95);
+    }
+
+    .action-btn.active {
+      background: var(--accent-soft);
+      border-color: var(--accent-color);
+      color: var(--accent-hover);
+    }
+
+    .action-btn.primary {
+      background: var(--accent-color);
+      border-color: var(--accent-color);
+      color: var(--accent-ink);
+    }
+
+    .lyrics-box {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 18px 16px;
+      background: var(--bg-app);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      scroll-behavior: smooth;
+    }
+
+    .lyrics-empty {
+      height: 100%;
+      min-height: 220px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: var(--text-sub);
+      gap: 6px;
+      font-size: 0.86rem;
+      animation: panelFadeIn 0.25s var(--ease-out-smooth) both;
+    }
+
+    /* 文字サイズ変更時に滑らかに拡縮 */
+    .lyric-line-row {
+      padding: 7px 11px;
+      margin: 3px 0;
+      border-radius: var(--radius-sm);
+      color: var(--text-sub);
+      font-size: var(--lyric-size);
+      line-height: 1.75;
+      cursor: pointer;
+      transition:
+        font-size 0.28s var(--ease-out-smooth),
+        line-height 0.28s var(--ease-out-smooth),
+        padding 0.24s var(--ease-out-smooth),
+        background 0.2s ease,
+        color 0.2s ease,
+        transform 0.22s var(--ease-out-smooth);
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .lyric-line-row:hover {
+      background: var(--bg-elevated);
+      color: var(--text-main);
+    }
+
+    .lyric-line-row.matched {
+      outline: 1.5px dashed var(--accent-color);
+      background: var(--accent-soft);
+    }
+
+    .lyric-line-row.active {
+      color: var(--text-main);
+      font-weight: 700;
+      background: var(--bg-surface);
+      border-left: 3.5px solid var(--accent-color);
+      transform: translateX(4px);
+    }
+
+    .lyric-main-text {
+      flex: 1;
+    }
+
+    .lyric-side-note {
+      font-size: 0.78em;
+      color: var(--text-sub);
+      font-weight: 500;
+      text-align: right;
+      max-width: 44%;
+      transition: font-size 0.28s var(--ease-out-smooth);
+    }
+
+    ruby rt {
+      font-size: 0.56em;
+      color: var(--accent-hover);
+      font-weight: 600;
+      transition: font-size 0.28s var(--ease-out-smooth);
+    }
+
+    .lyric-char {
+      display: inline-block;
+      transition: transform 0.16s var(--ease-out-smooth), color 0.18s ease;
+    }
+
+    .lyric-char.singing {
+      color: var(--accent-hover);
+      font-weight: 800;
+      transform: translateY(-2px) scale(1.07);
+    }
+
+    .lyric-char.sung {
+      color: var(--sung-color);
+    }
+
+    /* 間奏ドットアニメーション：表示・消滅ともに滑らかなトランジション */
+    .lyric-interlude {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 14px;
+      margin: 0 auto;
+      max-height: 0;
+      opacity: 0;
+      transform: translateY(-6px) scale(0.9);
+      pointer-events: none;
+      overflow: hidden;
+      border-radius: 999px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-color);
+      cursor: pointer;
+      width: fit-content;
+      transition:
+        opacity 0.32s var(--ease-out-smooth),
+        transform 0.34s var(--ease-out-smooth),
+        max-height 0.34s var(--ease-out-smooth),
+        padding 0.3s var(--ease-out-smooth),
+        margin 0.3s var(--ease-out-smooth);
+    }
+
+    .lyric-interlude.visible {
+      max-height: 44px;
+      padding: 9px 16px;
+      margin: 6px auto;
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      pointer-events: auto;
+    }
+
+    .interlude-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent-color);
+      animation: interludeBounce 1.35s infinite ease-in-out;
+    }
+
+    .interlude-dot:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    .interlude-dot:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+
+    @keyframes interludeBounce {
+      0%, 80%, 100% {
+        transform: translateY(0) scale(0.82);
+        opacity: 0.42;
+      }
+      40% {
+        transform: translateY(-4px) scale(1.16);
+        opacity: 1;
+      }
+    }
+
+    .lyrics-editor {
+      display: none;
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      padding: 12px;
+      background: var(--bg-app);
+      color: var(--text-main);
+      border: 1px solid var(--accent-color);
+      border-radius: var(--radius-md);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.85rem;
+      line-height: 1.65;
+      resize: none;
+      outline: none;
+      animation: panelFadeIn 0.2s var(--ease-out-smooth) both;
+    }
+
+    /* 全画面歌詞オーバーレイ：上下バーを確実に画面内に保持 */
+    .fullscreen-lyrics-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9500;
+      display: none;
+      flex-direction: column;
+      background: #090c10;
+      color: #f3f5f8;
+      overflow: hidden;
+      opacity: 0;
+      transition: opacity 0.28s var(--ease-out-smooth);
+      --beat-pulse: 0;
+    }
+
+    .fullscreen-lyrics-overlay.open {
+      display: flex;
+      opacity: 1;
+    }
+
+    .fs-bg-layer {
+      position: absolute;
+      inset: -40px;
+      background-size: cover;
+      background-position: center;
+      filter: blur(28px) saturate(1.2) brightness(0.36);
+      transform: scale(calc(1.05 + var(--beat-pulse) * 0.04));
+      transition: transform 0.2s var(--ease-out-smooth), filter 0.3s ease;
+      z-index: 0;
+    }
+
+    .fullscreen-lyrics-overlay[data-fs-bg="aurora"] .fs-bg-layer {
+      background-image:
+        radial-gradient(circle at 20% 30%, rgba(224, 90, 62, 0.5), transparent 50%),
+        radial-gradient(circle at 80% 70%, rgba(56, 152, 236, 0.45), transparent 55%),
+        linear-gradient(135deg, #090d14, #161c28);
+      filter: blur(18px) brightness(calc(0.7 + var(--beat-pulse) * 0.2));
+    }
+
+    .fullscreen-lyrics-overlay[data-fs-bg="grid"] .fs-bg-layer {
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+      background-size: 40px 40px;
+      filter: brightness(calc(0.65 + var(--beat-pulse) * 0.25));
+    }
+
+    .fs-content {
+      position: relative;
+      z-index: 1;
+      height: 100dvh;
+      max-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 16px 24px;
+      gap: 12px;
+      overflow: hidden;
+    }
+
+    .fs-top-bar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      background: rgba(14, 18, 25, 0.86);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 8px 14px;
+      z-index: 2;
+    }
+
+    .fs-track-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .fs-cover {
+      width: 42px;
+      height: 42px;
+      border-radius: 6px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+
+    .fs-title {
+      font-size: 1rem;
+      font-weight: 800;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .fs-sub {
+      font-size: 0.72rem;
+      color: var(--text-sub);
+    }
+
+    .fs-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    /* 末尾の行が中央に来ても上下バーを隠さない余白設計 */
+    .fs-lyrics-stage {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 32vh 10%;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      scroll-behavior: smooth;
+      --fs-lyric-size: 1.9rem;
+    }
+
+    .fs-line {
+      font-size: var(--fs-lyric-size);
+      line-height: 1.58;
+      color: rgba(243, 245, 248, 0.45);
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 14px;
+      transition:
+        font-size 0.3s var(--ease-out-smooth),
+        line-height 0.3s var(--ease-out-smooth),
+        color 0.22s ease,
+        transform 0.25s var(--ease-out-smooth);
+    }
+
+    .fs-line.active {
+      color: #ffffff;
+      font-weight: 800;
+      transform: scale(1.03) translateX(6px);
+    }
+
+    /* 全画面歌詞の間奏ドット：表示・消滅アニメーション */
+    .fs-interlude {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 16px;
+      margin: 0;
+      max-height: 0;
+      opacity: 0;
+      transform: translateY(-6px) scale(0.9);
+      pointer-events: none;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.14);
+      width: fit-content;
+      cursor: pointer;
+      transition:
+        opacity 0.32s var(--ease-out-smooth),
+        transform 0.34s var(--ease-out-smooth),
+        max-height 0.34s var(--ease-out-smooth),
+        padding 0.3s var(--ease-out-smooth),
+        margin 0.3s var(--ease-out-smooth);
+    }
+
+    .fs-interlude.visible {
+      max-height: 44px;
+      padding: 8px 18px;
+      margin: 4px 0;
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      pointer-events: auto;
+    }
+
+    .fs-bottom-bar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(14, 18, 25, 0.86);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 8px 14px;
+      z-index: 2;
+    }
+
+    /* ミニプレイヤー */
+    .mini-player-widget {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 9000;
+      width: 300px;
+      background: var(--bg-surface);
+      border: 1px solid var(--accent-color);
+      border-radius: 10px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      opacity: 0;
+      transform: translateY(14px) scale(0.96);
+      pointer-events: none;
+      transition: opacity 0.24s var(--ease-out-smooth), transform 0.26s var(--ease-out-smooth);
+    }
+
+    .mini-player-widget.visible {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      pointer-events: auto;
+    }
+
+    .mini-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .mini-title {
+      font-size: 0.82rem;
+      font-weight: 800;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .mini-lyric {
+      font-size: 0.76rem;
+      color: var(--accent-hover);
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      background: var(--bg-app);
+      padding: 5px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      transition: color 0.2s ease;
+    }
+
+    .mini-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    /* ガイドモーダル */
+    .guide-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 9600;
+      background: rgba(5, 7, 10, 0.72);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      opacity: 0;
+      transition: opacity 0.22s var(--ease-out-smooth);
+    }
+
+    .guide-modal.open {
+      display: flex;
+      opacity: 1;
+    }
+
+    .guide-card {
+      width: min(92vw, 540px);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 0.82rem;
+      animation: panelFadeIn 0.24s var(--ease-out-smooth) both;
+    }
+
+    .guide-card code {
+      background: var(--bg-elevated);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
+    /* 再生リスト・フィルタ */
+    .playlist-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .playlist-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .search-input {
+      flex: 1;
+      min-width: 150px;
+      background: var(--bg-app);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 5px 9px;
+      font-size: 0.78rem;
+      outline: none;
+      transition: border-color 0.18s ease;
+    }
+
+    .search-input:focus {
+      border-color: var(--accent-color);
+    }
+
+    .playlist-meta-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.72rem;
+      color: var(--text-sub);
+      flex-shrink: 0;
+    }
+
+    .danger-link-btn {
+      background: transparent;
+      color: #f87171;
+      border: 1px solid rgba(248, 113, 113, 0.35);
+      border-radius: var(--radius-sm);
+      padding: 2px 7px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.14s var(--ease-out-smooth), background 0.16s ease;
+    }
+
+    .danger-link-btn:active {
+      transform: scale(0.95);
+    }
+
+    .playlist-list {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .track-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 7px 10px;
+      background: var(--bg-app);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background 0.16s ease, border-color 0.18s ease, transform 0.16s var(--ease-out-smooth);
+    }
+
+    .track-row:hover {
+      background: var(--bg-elevated);
+      transform: translateX(2px);
+    }
+
+    .track-row.playing {
+      border-color: var(--accent-color);
+      background: var(--accent-soft);
+    }
+
+    .track-row.drag-over {
+      border-top: 2.5px solid var(--accent-color);
+    }
+
+    .track-row-main {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .track-row-title {
+      font-size: 0.84rem;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .track-row.playing .track-row-title {
+      color: var(--accent-hover);
+    }
+
+    .track-row-meta {
+      font-size: 0.69rem;
+      color: var(--text-sub);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .row-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .mini-btn {
+      background: var(--bg-elevated);
+      color: var(--text-sub);
+      border: 1px solid var(--border-color);
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.14s var(--ease-out-smooth), background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+    }
+
+    .mini-btn:active {
+      transform: scale(0.94);
+    }
+
+    .mini-btn.liked,
+    .mini-btn.in-pl {
+      color: var(--accent-hover);
+      border-color: var(--accent-color);
+      background: var(--accent-soft);
+    }
+
+    /* アルバムグリッド */
+    .album-grid {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+      gap: 10px;
+      overflow-y: auto;
+      align-content: start;
+    }
+
+    .album-card {
+      background: var(--bg-app);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      cursor: pointer;
+      transition: border-color 0.18s ease, transform 0.2s var(--ease-out-smooth), box-shadow 0.2s ease;
+    }
+
+    .album-card:hover {
+      border-color: var(--accent-color);
+      transform: translateY(-3px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+    }
+
+    .album-thumb {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border-radius: 6px;
+      object-fit: cover;
+      background: var(--bg-elevated);
+      transition: transform 0.28s var(--ease-out-smooth);
+    }
+
+    .album-card:hover .album-thumb {
+      transform: scale(1.03);
+    }
+
+    .album-name {
+      font-size: 0.78rem;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .album-count {
+      font-size: 0.69rem;
+      color: var(--text-sub);
+    }
+
+    /* サウンド・統計 */
+    .eq-panel {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-right: 2px;
+    }
+
+    .eq-presets {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .eq-band {
+      background: var(--bg-app);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .eq-band-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.76rem;
+      font-weight: 700;
+    }
+
+    .eq-band-val {
+      color: var(--accent-hover);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .sound-extra-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      background: var(--bg-app);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      font-size: 0.76rem;
+    }
+
+    .stats-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 8px;
+    }
+
+    .stat-card {
+      background: var(--bg-app);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 10px;
+      transition: transform 0.18s var(--ease-out-smooth), border-color 0.18s ease;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+      border-color: #3a465c;
+    }
+
+    .stat-label {
+      font-size: 0.7rem;
+      color: var(--text-sub);
+    }
+
+    .stat-value {
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: var(--accent-hover);
+      margin-top: 2px;
+    }
+
+    .ranking-box {
+      background: var(--bg-app);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .ranking-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      padding: 4px 0;
+      border-bottom: 1px dashed var(--border-color);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+<body data-theme="coral">
+
+<!-- イントロ動画オーバーレイ -->
+<div class="intro-overlay" id="introOverlay">
+  <div class="intro-video-wrap">
+    <video id="introVideo" class="intro-video" playsinline preload="auto"></video>
+  </div>
+  <div class="intro-controls">
+    <button type="button" class="intro-btn primary" id="playIntroManualBtn" style="display:none;">イントロを再生</button>
+    <button type="button" class="intro-btn" id="toggleIntroMuteBtn">音声ON中（クリックでOFF）</button>
+    <button type="button" class="intro-btn" id="skipIntroBtn">プレイヤーへ進む</button>
+  </div>
+  <div class="intro-status-note" id="introStatusNote">イントロ動画を準備しています...</div>
+</div>
+
+<div class="app-shell">
+  <!-- 最上段ヘッダー：左上にmimimiロゴ -->
+  <header class="top-header">
+    <div class="brand-logo-wrap">
+      <span class="brand-logo">mimimi</span>
+      <span class="brand-tagline">Music &amp; Lyrics Player</span>
+    </div>
+    <div class="header-actions">
+      <button type="button" class="small-ghost-btn" id="toggleMiniPlayerBtn">ミニ窓</button>
+      <button type="button" class="small-ghost-btn" id="replayIntroBtn">イントロ</button>
+      <button type="button" class="small-ghost-btn" id="openGuideBtn">ガイド</button>
+    </div>
+  </header>
+
+  <!-- メイン2カラム -->
+  <div class="main-grid">
+    <!-- 左ペイン：1画面内に収まるコンパクトプレイヤー -->
+    <aside class="panel player-pane">
+      <div class="drop-zone" id="dropZone">
+        <span class="drop-zone-text">フォルダ・音楽・LRC・画像を読込</span>
+        <div class="import-btn-group">
+          <button type="button" class="import-btn primary" id="selectFolderBtn">フォルダ</button>
+          <button type="button" class="import-btn" id="selectFilesBtn">ファイル</button>
+        </div>
+        <input type="file" id="folderInput" webkitdirectory directory multiple />
+        <input type="file" id="fileInput" accept="audio/*,.lrc,.txt,image/*" multiple />
+      </div>
+
+      <div class="now-playing-top">
+        <div class="cover-art" id="coverArt">mimimi</div>
+        <div class="track-meta">
+          <div class="track-folder" id="trackFolder">フォルダ未選択</div>
+          <div class="track-title" id="trackTitle">曲が選択されていません</div>
+          <div class="track-status-row">
+            <span id="trackStatus">0 / 0 曲</span>
+            <div class="utility-strip">
+              <button type="button" class="like-btn" id="likeBtn">お気に入り</button>
+              <button type="button" class="like-btn" id="seekBack10Btn">-10s</button>
+              <button type="button" class="like-btn" id="seekFwd10Btn">+10s</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bookmark-bar">
+        <div class="bookmark-header">
+          <span>再生しおり</span>
+          <div style="display:flex; gap:4px;">
+            <button type="button" class="small-ghost-btn" id="addBookmarkBtn">+しおり</button>
+            <button type="button" class="small-ghost-btn" id="clearBookmarksBtn">消去</button>
+          </div>
+        </div>
+        <div class="bookmark-chips" id="bookmarkChips">
+          <span style="font-size:0.66rem; color:var(--text-sub);">しおり未登録</span>
+        </div>
+      </div>
+
+      <div class="status-banner" id="queueBanner">
+        <span>次の予約: <strong id="queueCount">0</strong> 曲</span>
+        <button type="button" class="small-ghost-btn" id="clearQueueBtn">解除</button>
+      </div>
+
+      <div class="status-banner" id="timerBanner">
+        <span>スリープ残り: <strong id="timerRemaining">0:00</strong></span>
+        <button type="button" class="small-ghost-btn" id="cancelTimerBtn">解除</button>
+      </div>
+
+      <div class="viz-box">
+        <div class="viz-header">
+          <span id="vizLabel">MODE: BAR</span>
+          <button type="button" class="small-ghost-btn" id="cycleVizModeBtn" style="padding:1px 6px; font-size:0.62rem;">切替</button>
+        </div>
+        <canvas id="visualizer" class="viz-canvas" width="320" height="36"></canvas>
+      </div>
+
+      <div class="seek-wrap">
+        <input type="range" id="seekBar" value="0" min="0" max="100" step="0.05" />
+        <div class="time-row">
+          <span id="currentTime">0:00</span>
+          <span id="duration">0:00</span>
+        </div>
+      </div>
+
+      <div class="main-controls">
+        <button type="button" class="ctrl-btn" id="prevBtn">前へ</button>
+        <button type="button" class="ctrl-btn primary" id="playPauseBtn">再生</button>
+        <button type="button" class="ctrl-btn" id="nextBtn">次へ</button>
+      </div>
+
+      <div class="mode-controls">
+        <button type="button" class="mode-btn" id="shuffleBtn">シャッフル: OFF</button>
+        <button type="button" class="mode-btn" id="repeatBtn">リピート: OFF</button>
+      </div>
+
+      <div class="ab-box">
+        <div class="ab-top">
+          <span>A-B リピート</span>
+          <span id="abRangeText">A:-- / B:--</span>
+        </div>
+        <div class="ab-btns">
+          <button type="button" class="mode-btn" id="setABtn">A 設定</button>
+          <button type="button" class="mode-btn" id="setBBtn">B 設定</button>
+          <button type="button" class="mode-btn" id="toggleAbBtn">A-B: OFF</button>
+        </div>
+      </div>
+
+      <div class="volume-row">
+        <button type="button" class="icon-btn" id="muteBtn">消音</button>
+        <input type="range" id="volumeBar" min="0" max="1" step="0.01" value="0.8" />
+      </div>
+
+      <div class="rate-pitch-row">
+        <button type="button" class="mode-btn" id="speedBtn">1.0x</button>
+        <button type="button" class="mode-btn" id="pitchBtn">キー: 0</button>
+        <button type="button" class="mode-btn" id="resetRatePitchBtn">標準</button>
+      </div>
+
+      <div class="extra-row">
+        <select class="select-box" id="sleepTimerSelect">
+          <option value="0">スリープ: OFF</option>
+          <option value="15">15分後停止</option>
+          <option value="30">30分後停止</option>
+          <option value="45">45分後停止</option>
+          <option value="60">60分後停止</option>
+        </select>
+        <span style="font-size:0.65rem; color:var(--text-sub);">Space:再生 / F:全画面</span>
+      </div>
+    </aside>
+
+    <!-- 右ペイン：画面右側にモード切替ボタンを集約 -->
+    <section class="panel content-pane">
+      <div class="right-nav-bar">
+        <div class="mode-switcher-group" role="tablist" aria-label="表示モード切替">
+          <button type="button" class="nav-mode-btn active" data-tab="lyricsTab">歌詞</button>
+          <button type="button" class="nav-mode-btn" data-tab="playlistTab">再生リスト</button>
+          <button type="button" class="nav-mode-btn" data-tab="albumsTab">アルバム</button>
+          <button type="button" class="nav-mode-btn" data-tab="soundTab">サウンド</button>
+          <button type="button" class="nav-mode-btn" data-tab="statsTab">統計</button>
+        </div>
+        <span class="lyrics-badge" id="lyricsModeBadge">歌詞未設定</span>
+      </div>
+
+      <!-- 歌詞タブ -->
+      <div class="tab-panel active" id="lyricsTab">
+        <div class="lyrics-toolbar">
+          <div class="lyrics-toolbar-left">
+            <div class="theme-swatches" title="アクセントカラー">
+              <button type="button" class="theme-btn active" data-theme="coral" title="コーラル"></button>
+              <button type="button" class="theme-btn" data-theme="ocean" title="オーシャン"></button>
+              <button type="button" class="theme-btn" data-theme="mint" title="ミント"></button>
+              <button type="button" class="theme-btn" data-theme="amber" title="アンバー"></button>
+              <input type="color" class="color-picker-mini" id="customColorPicker" value="#e05a3e" title="カスタムカラー" />
+            </div>
+
+            <div class="font-size-group">
+              <button type="button" class="font-size-btn" data-size="0.94rem">小</button>
+              <button type="button" class="font-size-btn active" data-size="1.08rem">中</button>
+              <button type="button" class="font-size-btn" data-size="1.28rem">大</button>
+            </div>
+
+            <div class="offset-group">
+              <span>同期</span>
+              <button type="button" class="offset-btn" id="offsetMinusBtn">-0.5s</button>
+              <span id="lyricOffsetBadge">ズレ: 0.0s</span>
+              <button type="button" class="offset-btn" id="offsetPlusBtn">+0.5s</button>
+              <button type="button" class="offset-btn" id="offsetResetBtn">0</button>
+            </div>
+
+            <input type="text" class="search-input" id="lyricSearchInput" placeholder="歌詞内を検索..." style="min-width:120px; padding:3px 8px; font-size:0.72rem;" />
+          </div>
+
+          <div class="lyrics-toolbar-right">
+            <button type="button" class="action-btn active" id="autoScrollToggleBtn">自動スクロール: ON</button>
+            <button type="button" class="action-btn" id="openFullscreenBtn">全画面歌詞</button>
+            <button type="button" class="action-btn" id="cardRatioBtn">カード: 16:9</button>
+            <button type="button" class="action-btn" id="exportCardPngBtn">カードPNG</button>
+            <button type="button" class="action-btn" id="stampLineBtn" style="display:none;">行刻印</button>
+            <button type="button" class="action-btn" id="stampCharBtn" style="display:none;">文字刻印</button>
+            <button type="button" class="action-btn" id="insertSampleLrcBtn" style="display:none;">サンプルLRC</button>
+            <button type="button" class="action-btn" id="exportLrcBtn" style="display:none;">LRC保存</button>
+            <button type="button" class="action-btn" id="editLyricsBtn">歌詞編集</button>
+            <button type="button" class="action-btn primary" id="saveLyricsBtn" style="display:none;">保存</button>
+          </div>
+        </div>
+
+        <div class="lyrics-box no-scrollbar" id="lyricsBox">
+          <div class="lyrics-empty">
+            <p>曲が選択されていません。</p>
+            <p>通常LRCの「...」行は自動で間奏ドット演出へ変換され、<br>拡張LRC（<code>&lt;00:12.34&gt;</code>）では「...」演出をオフにしてスッキリ表示します。</p>
+          </div>
+        </div>
+
+        <textarea class="lyrics-editor" id="lyricsEditor" placeholder="[00:12.00] 歌詞の1行目 // 訳詞やメモ&#10;[00:18.00] ...&#10;[00:24.00] <00:24.10>拡<00:24.30>張<00:24.50>LRCの例"></textarea>
+      </div>
+
+      <!-- 再生リストタブ -->
+      <div class="tab-panel" id="playlistTab">
+        <div class="playlist-controls">
+          <div class="playlist-row">
+            <select class="select-box" id="customPlaylistSelect" style="max-width:190px;">
+              <option value="ALL_TRACKS">すべての曲</option>
+              <option value="__RECENT__">最近再生した曲 (0)</option>
+            </select>
+            <input type="text" class="search-input" id="newPlaylistNameInput" placeholder="新しいマイリスト名..." style="min-width:130px;" />
+            <button type="button" class="action-btn primary" id="createPlaylistBtn">リスト作成</button>
+            <button type="button" class="action-btn" id="favShufflePlayBtn">お気に入りシャッフル</button>
+            <button type="button" class="action-btn" id="detectDupBtn">重複チェック</button>
+            <button type="button" class="action-btn" id="exportJsonBtn">JSON書出</button>
+            <button type="button" class="action-btn" id="importJsonBtn">JSON読込</button>
+            <input type="file" id="jsonInput" accept=".json,application/json" />
+          </div>
+
+          <div class="playlist-row">
+            <input type="text" class="search-input" id="searchInput" placeholder="曲名・フォルダ・#タグで検索..." />
+            <select class="select-box" id="folderFilterSelect" style="max-width:175px;">
+              <option value="ALL">すべてのフォルダ (0)</option>
+            </select>
+            <select class="select-box" id="tagFilterSelect" style="max-width:140px;">
+              <option value="ALL">すべてのタグ (0)</option>
+            </select>
+            <select class="select-box" id="lyricsFilterSelect" style="max-width:130px;">
+              <option value="ALL">歌詞: すべて</option>
+              <option value="WITH_LYRICS">歌詞あり</option>
+              <option value="NO_LYRICS">歌詞なし</option>
+            </select>
+            <select class="select-box" id="sortSelect" style="max-width:145px;">
+              <option value="DEFAULT">並び順: 読込順</option>
+              <option value="TITLE">曲名順</option>
+              <option value="FOLDER">フォルダ順</option>
+              <option value="PLAY_COUNT">再生回数順</option>
+            </select>
+            <button type="button" class="mode-btn" id="favFilterBtn">お気に入りのみ</button>
+          </div>
+
+          <div class="playlist-row">
+            <input type="text" class="search-input" id="tagAssignInput" placeholder="現在の曲に付けるタグ（例: 夜, 集中）..." />
+            <button type="button" class="action-btn" id="addTagToCurrentBtn">タグ追加</button>
+          </div>
+        </div>
+
+        <div class="playlist-meta-bar">
+          <span id="playlistCountText">0 / 0 曲表示中</span>
+          <button type="button" class="danger-link-btn" id="clearAllTracksBtn">リストを空にする</button>
+        </div>
+
+        <div class="playlist-list no-scrollbar" id="playlistList">
+          <div class="lyrics-empty">表示できる曲がありません</div>
+        </div>
+      </div>
+
+      <!-- アルバムタブ -->
+      <div class="tab-panel" id="albumsTab">
+        <div class="album-grid no-scrollbar" id="albumGrid">
+          <div class="lyrics-empty" style="grid-column:1/-1;">フォルダまたは音楽ファイルを読み込むと一覧が表示されます。</div>
+        </div>
+      </div>
+
+      <!-- サウンドタブ -->
+      <div class="tab-panel" id="soundTab">
+        <div class="eq-panel no-scrollbar">
+          <div class="eq-presets">
+            <button type="button" class="action-btn eq-preset-btn active" data-bass="0" data-mid="0" data-treble="0">Flat</button>
+            <button type="button" class="action-btn eq-preset-btn" data-bass="6" data-mid="-1" data-treble="3">Bass Boost</button>
+            <button type="button" class="action-btn eq-preset-btn" data-bass="-2" data-mid="5" data-treble="4">Vocal Clear</button>
+            <button type="button" class="action-btn eq-preset-btn" data-bass="4" data-mid="1" data-treble="-4">Chill / Lo-Fi</button>
+          </div>
+
+          <div class="eq-band">
+            <div class="eq-band-header">
+              <span>Low（100Hz 低音）</span>
+              <span class="eq-band-val" id="bassVal">0 dB</span>
+            </div>
+            <input type="range" id="bassSlider" min="-12" max="12" step="1" value="0" />
+          </div>
+
+          <div class="eq-band">
+            <div class="eq-band-header">
+              <span>Mid（1kHz 中音）</span>
+              <span class="eq-band-val" id="midVal">0 dB</span>
+            </div>
+            <input type="range" id="midSlider" min="-12" max="12" step="1" value="0" />
+          </div>
+
+          <div class="eq-band">
+            <div class="eq-band-header">
+              <span>High（8kHz 高音）</span>
+              <span class="eq-band-val" id="trebleVal">0 dB</span>
+            </div>
+            <input type="range" id="trebleSlider" min="-12" max="12" step="1" value="0" />
+          </div>
+
+          <div class="eq-band">
+            <div class="eq-band-header">
+              <span>左右バランス（Stereo Pan）</span>
+              <span class="eq-band-val" id="panVal">0.0 (中央)</span>
+            </div>
+            <input type="range" id="panSlider" min="-1" max="1" step="0.1" value="0" />
+          </div>
+
+          <div class="eq-band">
+            <div class="eq-band-header">
+              <span>個別音量補正（Track Gain）</span>
+              <span class="eq-band-val" id="trackGainVal">0 dB</span>
+            </div>
+            <input type="range" id="trackGainSlider" min="-6" max="6" step="1" value="0" />
+          </div>
+
+          <div class="sound-extra-row">
+            <div>
+              <div style="font-weight:700;">ボーカルキャンセル（L - R 差分）</div>
+              <div style="font-size:0.7rem; color:var(--text-sub);">センター定位のボーカル成分を抑えます</div>
+            </div>
+            <button type="button" class="action-btn" id="vocalCancelBtn">ボーカルキャンセル: OFF</button>
+          </div>
+
+          <div class="sound-extra-row">
+            <div>
+              <div style="font-weight:700;">モノラルミックス</div>
+              <div style="font-size:0.7rem; color:var(--text-sub);">左右チャンネルを合成して出力します</div>
+            </div>
+            <button type="button" class="action-btn" id="monoToggleBtn">モノラル: OFF</button>
+          </div>
+
+          <div class="sound-extra-row">
+            <div>
+              <div style="font-weight:700;">曲変わりフェード</div>
+              <div style="font-size:0.7rem; color:var(--text-sub);">冒頭と終盤で音量を滑らかに変化させます</div>
+            </div>
+            <button type="button" class="action-btn" id="fadeToggleBtn">フェード: OFF</button>
+          </div>
+
+          <div class="sound-extra-row">
+            <div style="flex:1; min-width:180px;">
+              <div style="font-weight:700;">環境音ミキサー</div>
+              <div style="display:flex; gap:6px; align-items:center; margin-top:4px;">
+                <select class="select-box" id="ambientTypeSelect">
+                  <option value="NONE">環境音: OFF</option>
+                  <option value="RAIN">雨音（Rain）</option>
+                  <option value="VINYL">ローファイノイズ（Vinyl）</option>
+                </select>
+                <input type="range" id="ambientVolSlider" min="0" max="0.4" step="0.01" value="0.08" style="width:110px;" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 統計タブ -->
+      <div class="tab-panel" id="statsTab">
+        <div class="stats-scroll no-scrollbar">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">登録曲数</div>
+              <div class="stat-value" id="statTrackCount">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">総再生回数</div>
+              <div class="stat-value" id="statTotalPlays">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">お気に入り / 歌詞あり</div>
+              <div class="stat-value" id="statFavLyrics">0 / 0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">しおり登録数</div>
+              <div class="stat-value" id="statBookmarks">0</div>
+            </div>
+          </div>
+          <div class="ranking-box">
+            <div style="font-size:0.8rem; font-weight:700; margin-bottom:4px;">よく再生している曲ランキング</div>
+            <div id="topPlayedList"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- 全画面歌詞オーバーレイ -->
+<div class="fullscreen-lyrics-overlay" id="fullscreenLyricsOverlay" data-fs-bg="blur">
+  <div class="fs-bg-layer" id="fsBgLayer"></div>
+  <div class="fs-content">
+    <div class="fs-top-bar">
+      <div class="fs-track-info">
+        <img src="Mimimi.png" alt="カバー" class="fs-cover" id="fsCoverImg" onerror="this.style.display='none'" />
+        <div style="min-width:0;">
+          <div class="fs-title" id="fsTrackTitle">曲が選択されていません</div>
+          <div class="fs-sub" id="fsTrackFolder">mimimi Fullscreen Lyrics</div>
+        </div>
+      </div>
+      <div class="fs-controls">
+        <button type="button" class="action-btn fs-bg-btn active" data-fs-bg="blur">背景: BLUR</button>
+        <button type="button" class="action-btn fs-bg-btn" data-fs-bg="aurora">背景: AURORA</button>
+        <button type="button" class="action-btn fs-bg-btn" data-fs-bg="grid">背景: GRID</button>
+        <button type="button" class="action-btn fs-size-btn" data-fs-size="1.4rem">文字: 小</button>
+        <button type="button" class="action-btn fs-size-btn active" data-fs-size="1.9rem">文字: 標準</button>
+        <button type="button" class="action-btn fs-size-btn" data-fs-size="2.45rem">文字: 大</button>
+        <button type="button" class="action-btn primary" id="fsPlayPauseBtn">再生</button>
+        <button type="button" class="action-btn" id="closeFullscreenBtn">閉じる (Esc)</button>
+      </div>
+    </div>
+
+    <div class="fs-lyrics-stage no-scrollbar" id="fsLyricsStage"></div>
+
+    <div class="fs-bottom-bar">
+      <span id="fsCurrentTime" style="font-size:0.78rem; color:var(--text-sub); font-variant-numeric:tabular-nums;">0:00</span>
+      <input type="range" id="fsSeekBar" value="0" min="0" max="100" step="0.05" style="flex:1;" />
+      <span id="fsDuration" style="font-size:0.78rem; color:var(--text-sub); font-variant-numeric:tabular-nums;">0:00</span>
+    </div>
+  </div>
+</div>
+
+<!-- ミニプレイヤー -->
+<div class="mini-player-widget" id="miniPlayerWidget">
+  <div class="mini-top">
+    <span class="mini-title" id="miniTrackTitle">曲が選択されていません</span>
+    <button type="button" class="small-ghost-btn" id="closeMiniPlayerBtn">閉じる</button>
+  </div>
+  <div class="mini-lyric" id="miniCurrentLyric">---</div>
+  <div class="mini-actions">
+    <button type="button" class="small-ghost-btn" id="miniPrevBtn">前へ</button>
+    <button type="button" class="action-btn primary" id="miniPlayPauseBtn" style="padding:3px 11px;">再生</button>
+    <button type="button" class="small-ghost-btn" id="miniNextBtn">次へ</button>
+  </div>
+</div>
+
+<!-- ガイドモーダル -->
+<div class="guide-modal" id="guideModal">
+  <div class="guide-card">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h3>mimimi 操作・歌詞記法ガイド</h3>
+      <button type="button" class="small-ghost-btn" id="closeGuideBtn">閉じる</button>
+    </div>
+    <div>
+      <strong>1. LRC と間奏（...）の自動処理</strong><br>
+      ・通常 LRC に含まれる <code>[00:45.00] ...</code> や <code>・・・</code> 行は、文字の「...」を消してドットアニメーションへ自動変換します。<br>
+      ・拡張 LRC（<code>&lt;00:12.34&gt;</code> の文字単位同期を含む歌詞）では「...」アニメーションを表示せずスッキリ表示します。
+    </div>
+    <div>
+      <strong>2. ルビ・2カラム訳詞・しおり</strong><br>
+      ・ルビ: <code>|夜空《よぞら》</code> / 2カラム: <code>歌詞テキスト // 訳詞やメモ</code><br>
+      ・<code>+しおり</code> で再生位置を保存し、ワンクリックでいつでも戻れます。
+    </div>
+    <div>
+      <strong>3. ショートカット</strong><br>
+      ・<code>Space</code>: 再生/停止 ・ <code>F</code>: 全画面歌詞 ・ <code>M</code>: 消音 ・ <code>← / →</code>: 5秒スキップ
+    </div>
+  </div>
+</div>
+
+<audio id="audioPlayer"></audio>
+
+<script>
+  const STORAGE_KEY = 'mimimi_saved_meta_v11';
+  const DEFAULT_ART_SRC = 'Mimimi.png';
+  const INTRO_VIDEO_SRC = 'mimimi.mp4';
+  const INTERLUDE_MIN_GAP = 4.5;
+
+  const introOverlay = document.getElementById('introOverlay');
+  const introVideo = document.getElementById('introVideo');
+  const introStatusNote = document.getElementById('introStatusNote');
+  const playIntroManualBtn = document.getElementById('playIntroManualBtn');
+  const toggleIntroMuteBtn = document.getElementById('toggleIntroMuteBtn');
+  const skipIntroBtn = document.getElementById('skipIntroBtn');
+  const replayIntroBtn = document.getElementById('replayIntroBtn');
+
+  introVideo.src = INTRO_VIDEO_SRC;
+
+  function closeIntro() {
+    introVideo.pause();
+    introOverlay.classList.add('hidden');
+  }
+
+  async function startIntroPlayback(preferMuted = false) {
+    introOverlay.classList.remove('hidden');
+    playIntroManualBtn.style.display = 'none';
+    introVideo.muted = preferMuted;
+    introVideo.currentTime = 0;
+
+    try {
+      await introVideo.play();
+      introStatusNote.textContent = introVideo.muted
+        ? '自動再生のため消音で再生中です（音声ON/OFFボタンで切替可能）'
+        : 'イントロを再生しています';
+    } catch {
+      if (!preferMuted) {
+        try {
+          introVideo.muted = true;
+          await introVideo.play();
+          introStatusNote.textContent = 'ブラウザ制限により消音再生中です';
+          return;
+        } catch {}
+      }
+      introStatusNote.textContent = '動画の再生待機中です。「イントロを再生」または「プレイヤーへ進む」を押してください';
+      playIntroManualBtn.style.display = 'inline-block';
+    }
+  }
+
+  introVideo.addEventListener('ended', closeIntro);
+  introVideo.addEventListener('error', () => {
+    introStatusNote.textContent = 'mimimi.mp4 が見つからないか再生できません。プレイヤーへ進みます';
+    setTimeout(closeIntro, 1200);
+  });
+
+  playIntroManualBtn.addEventListener('click', () => {
+    introVideo.muted = false;
+    introVideo.play().then(() => {
+      playIntroManualBtn.style.display = 'none';
+      introStatusNote.textContent = 'イントロを再生しています';
+    }).catch(() => {});
+  });
+
+  skipIntroBtn.addEventListener('click', closeIntro);
+  replayIntroBtn.addEventListener('click', () => startIntroPlayback(false));
+
+  toggleIntroMuteBtn.addEventListener('click', () => {
+    introVideo.muted = !introVideo.muted;
+    introVideo.play().catch(() => {});
+    toggleIntroMuteBtn.textContent = introVideo.muted ? '音声OFF中（クリックでON）' : '音声ON中（クリックでOFF）';
+  });
+
+  const audio = document.getElementById('audioPlayer');
+  if ('preservesPitch' in audio) audio.preservesPitch = true;
+
+  const dropZone = document.getElementById('dropZone');
+  const selectFolderBtn = document.getElementById('selectFolderBtn');
+  const selectFilesBtn = document.getElementById('selectFilesBtn');
+  const folderInput = document.getElementById('folderInput');
+  const fileInput = document.getElementById('fileInput');
+  const coverArt = document.getElementById('coverArt');
+  const trackFolder = document.getElementById('trackFolder');
+  const trackTitle = document.getElementById('trackTitle');
+  const trackStatus = document.getElementById('trackStatus');
+  const likeBtn = document.getElementById('likeBtn');
+  const seekBack10Btn = document.getElementById('seekBack10Btn');
+  const seekFwd10Btn = document.getElementById('seekFwd10Btn');
+  const addBookmarkBtn = document.getElementById('addBookmarkBtn');
+  const clearBookmarksBtn = document.getElementById('clearBookmarksBtn');
+  const bookmarkChips = document.getElementById('bookmarkChips');
+  const toggleMiniPlayerBtn = document.getElementById('toggleMiniPlayerBtn');
+  const openGuideBtn = document.getElementById('openGuideBtn');
+  const closeGuideBtn = document.getElementById('closeGuideBtn');
+  const guideModal = document.getElementById('guideModal');
+  const vizLabel = document.getElementById('vizLabel');
+  const cycleVizModeBtn = document.getElementById('cycleVizModeBtn');
+  const seekBar = document.getElementById('seekBar');
+  const currentTimeEl = document.getElementById('currentTime');
+  const durationEl = document.getElementById('duration');
+  const playPauseBtn = document.getElementById('playPauseBtn');
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const shuffleBtn = document.getElementById('shuffleBtn');
+  const repeatBtn = document.getElementById('repeatBtn');
+  const abRangeText = document.getElementById('abRangeText');
+  const setABtn = document.getElementById('setABtn');
+  const setBBtn = document.getElementById('setBBtn');
+  const toggleAbBtn = document.getElementById('toggleAbBtn');
+  const muteBtn = document.getElementById('muteBtn');
+  const volumeBar = document.getElementById('volumeBar');
+  const sleepTimerSelect = document.getElementById('sleepTimerSelect');
+  const speedBtn = document.getElementById('speedBtn');
+  const pitchBtn = document.getElementById('pitchBtn');
+  const resetRatePitchBtn = document.getElementById('resetRatePitchBtn');
+  const queueBanner = document.getElementById('queueBanner');
+  const queueCount = document.getElementById('queueCount');
+  const clearQueueBtn = document.getElementById('clearQueueBtn');
+  const timerBanner = document.getElementById('timerBanner');
+  const timerRemaining = document.getElementById('timerRemaining');
+  const cancelTimerBtn = document.getElementById('cancelTimerBtn');
+
+  const navModeBtns = document.querySelectorAll('.nav-mode-btn');
+  const tabPanels = document.querySelectorAll('.tab-panel');
+  const themeBtns = document.querySelectorAll('.theme-btn');
+  const customColorPicker = document.getElementById('customColorPicker');
+  const fontSizeBtns = document.querySelectorAll('.font-size-btn');
+  const autoScrollToggleBtn = document.getElementById('autoScrollToggleBtn');
+  const openFullscreenBtn = document.getElementById('openFullscreenBtn');
+  const cardRatioBtn = document.getElementById('cardRatioBtn');
+  const exportCardPngBtn = document.getElementById('exportCardPngBtn');
+  const lyricsModeBadge = document.getElementById('lyricsModeBadge');
+  const lyricSearchInput = document.getElementById('lyricSearchInput');
+  const offsetMinusBtn = document.getElementById('offsetMinusBtn');
+  const offsetPlusBtn = document.getElementById('offsetPlusBtn');
+  const offsetResetBtn = document.getElementById('offsetResetBtn');
+  const lyricOffsetBadge = document.getElementById('lyricOffsetBadge');
+  const stampLineBtn = document.getElementById('stampLineBtn');
+  const stampCharBtn = document.getElementById('stampCharBtn');
+  const insertSampleLrcBtn = document.getElementById('insertSampleLrcBtn');
+  const exportLrcBtn = document.getElementById('exportLrcBtn');
+  const editLyricsBtn = document.getElementById('editLyricsBtn');
+  const saveLyricsBtn = document.getElementById('saveLyricsBtn');
+  const lyricsBox = document.getElementById('lyricsBox');
+  const lyricsEditor = document.getElementById('lyricsEditor');
+
+  const fsOverlay = document.getElementById('fullscreenLyricsOverlay');
+  const fsBgLayer = document.getElementById('fsBgLayer');
+  const fsCoverImg = document.getElementById('fsCoverImg');
+  const fsTrackTitle = document.getElementById('fsTrackTitle');
+  const fsTrackFolder = document.getElementById('fsTrackFolder');
+  const fsPlayPauseBtn = document.getElementById('fsPlayPauseBtn');
+  const closeFullscreenBtn = document.getElementById('closeFullscreenBtn');
+  const fsLyricsStage = document.getElementById('fsLyricsStage');
+  const fsSeekBar = document.getElementById('fsSeekBar');
+  const fsCurrentTime = document.getElementById('fsCurrentTime');
+  const fsDuration = document.getElementById('fsDuration');
+  const fsSizeBtns = document.querySelectorAll('.fs-size-btn');
+  const fsBgBtns = document.querySelectorAll('.fs-bg-btn');
+
+  const miniPlayerWidget = document.getElementById('miniPlayerWidget');
+  const miniTrackTitle = document.getElementById('miniTrackTitle');
+  const miniCurrentLyric = document.getElementById('miniCurrentLyric');
+  const miniPrevBtn = document.getElementById('miniPrevBtn');
+  const miniPlayPauseBtn = document.getElementById('miniPlayPauseBtn');
+  const miniNextBtn = document.getElementById('miniNextBtn');
+  const closeMiniPlayerBtn = document.getElementById('closeMiniPlayerBtn');
+
+  const customPlaylistSelect = document.getElementById('customPlaylistSelect');
+  const newPlaylistNameInput = document.getElementById('newPlaylistNameInput');
+  const createPlaylistBtn = document.getElementById('createPlaylistBtn');
+  const favShufflePlayBtn = document.getElementById('favShufflePlayBtn');
+  const detectDupBtn = document.getElementById('detectDupBtn');
+  const exportJsonBtn = document.getElementById('exportJsonBtn');
+  const importJsonBtn = document.getElementById('importJsonBtn');
+  const jsonInput = document.getElementById('jsonInput');
+  const tagFilterSelect = document.getElementById('tagFilterSelect');
+  const tagAssignInput = document.getElementById('tagAssignInput');
+  const addTagToCurrentBtn = document.getElementById('addTagToCurrentBtn');
+  const lyricsFilterSelect = document.getElementById('lyricsFilterSelect');
+  const searchInput = document.getElementById('searchInput');
+  const folderFilterSelect = document.getElementById('folderFilterSelect');
+  const sortSelect = document.getElementById('sortSelect');
+  const favFilterBtn = document.getElementById('favFilterBtn');
+  const playlistCountText = document.getElementById('playlistCountText');
+  const clearAllTracksBtn = document.getElementById('clearAllTracksBtn');
+  const playlistList = document.getElementById('playlistList');
+  const albumGrid = document.getElementById('albumGrid');
+
+  const bassSlider = document.getElementById('bassSlider');
+  const midSlider = document.getElementById('midSlider');
+  const trebleSlider = document.getElementById('trebleSlider');
+  const panSlider = document.getElementById('panSlider');
+  const trackGainSlider = document.getElementById('trackGainSlider');
+  const bassVal = document.getElementById('bassVal');
+  const midVal = document.getElementById('midVal');
+  const trebleVal = document.getElementById('trebleVal');
+  const panVal = document.getElementById('panVal');
+  const trackGainVal = document.getElementById('trackGainVal');
+  const eqPresetBtns = document.querySelectorAll('.eq-preset-btn');
+  const vocalCancelBtn = document.getElementById('vocalCancelBtn');
+  const monoToggleBtn = document.getElementById('monoToggleBtn');
+  const fadeToggleBtn = document.getElementById('fadeToggleBtn');
+  const ambientTypeSelect = document.getElementById('ambientTypeSelect');
+  const ambientVolSlider = document.getElementById('ambientVolSlider');
+
+  const statTrackCount = document.getElementById('statTrackCount');
+  const statTotalPlays = document.getElementById('statTotalPlays');
+  const statFavLyrics = document.getElementById('statFavLyrics');
+  const statBookmarks = document.getElementById('statBookmarks');
+  const topPlayedList = document.getElementById('topPlayedList');
+
+  const canvas = document.getElementById('visualizer');
+  const ctx = canvas.getContext('2d');
+  let audioCtx = null;
+  let analyser = null;
+  let bassFilter = null;
+  let midFilter = null;
+  let trebleFilter = null;
+  let pannerNode = null;
+  let trackGainNode = null;
+  let splitterNode = null;
+  let channelMerger = null;
+  let invertGainNode = null;
+  let ambientSourceNode = null;
+  let ambientGainNode = null;
+  let freqArray = null;
+  let timeDomainArray = null;
+
+  const vizModes = ['BAR', 'WAVE', 'RING', 'PARTICLES'];
+  let vizModeIndex = 0;
+  const particles = Array.from({ length: 24 }, () => ({
+    x: Math.random() * 320,
+    y: Math.random() * 36,
+    vx: (Math.random() - 0.5) * 1.4,
+    vy: (Math.random() - 0.5) * 1.0,
+    r: 1.4 + Math.random() * 2.2
+  }));
+
+  let tracks = [];
+  let folderCoverMap = new Map();
+  let customPlaylists = {};
+  let recentTrackNames = [];
+  let playQueue = [];
+  let currentTrackId = null;
+  let countedPlayForTrackId = null;
+  let draggedTrackId = null;
+  let isShuffle = false;
+  let repeatMode = 0;
+  let onlyFavorites = false;
+  let isAutoScroll = true;
+  let isMonoMix = false;
+  let isVocalCancel = false;
+  let abPointA = null;
+  let abPointB = null;
+  let isAbLoop = false;
+  let lyricOffset = 0;
+  let activeLyricIndex = -1;
+  let activeInterludeKey = null;
+  let lastVolume = 0.8;
+  const speeds = [0.75, 1.0, 1.25, 1.5];
+  let speedIndex = 1;
+  const semitoneSteps = [-6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6];
+  let semitoneIndex = 6;
+  let sleepEndTime = null;
+  let sleepIntervalId = null;
+  let isFadeEnabled = false;
+  let isSquareCard = false;
+
+  audio.volume = volumeBar.value;
+
+  openGuideBtn.addEventListener('click', () => guideModal.classList.add('open'));
+  closeGuideBtn.addEventListener('click', () => guideModal.classList.remove('open'));
+  guideModal.addEventListener('click', (e) => {
+    if (e.target === guideModal) guideModal.classList.remove('open');
+  });
+
+  cardRatioBtn.addEventListener('click', () => {
+    isSquareCard = !isSquareCard;
+    cardRatioBtn.textContent = isSquareCard ? 'カード: 1:1' : 'カード: 16:9';
+    cardRatioBtn.classList.toggle('active', isSquareCard);
+  });
+
+  function loadSavedMeta() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{"tracks":{},"playlists":{},"recent":[],"theme":"coral","customColor":"#e05a3e"}');
+    } catch {
+      return { tracks: {}, playlists: {}, recent: [], theme: 'coral', customColor: '#e05a3e' };
+    }
+  }
+
+  function persistAllMeta() {
+    const data = loadSavedMeta();
+    data.playlists = customPlaylists;
+    data.recent = recentTrackNames;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch {}
+  }
+
+  function saveTrackMeta(track) {
+    if (!track) return;
+    const data = loadSavedMeta();
+    data.tracks = data.tracks || {};
+    data.tracks[track.name] = {
+      liked: track.liked,
+      rawLyrics: track.rawLyrics,
+      playCount: track.playCount || 0,
+      tags: track.tags || [],
+      gainDb: track.gainDb || 0,
+      bookmarks: track.bookmarks || []
+    };
+    data.playlists = customPlaylists;
+    data.recent = recentTrackNames;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch {}
+  }
+
+  function hexToRgba(hex, alpha) {
+    const clean = hex.replace('#', '');
+    if (clean.length !== 6) return `rgba(224, 90, 62, ${alpha})`;
+    const r = parseInt(clean.slice(0, 2), 16);
+    const g = parseInt(clean.slice(2, 4), 16);
+    const b = parseInt(clean.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  function applyTheme(themeName, customHex = null) {
+    document.body.setAttribute('data-theme', themeName);
+    themeBtns.forEach(b => b.classList.toggle('active', b.dataset.theme === themeName));
+
+    if (themeName === 'custom' && customHex) {
+      document.body.style.setProperty('--accent-color', customHex);
+      document.body.style.setProperty('--accent-hover', customHex);
+      document.body.style.setProperty('--accent-soft', hexToRgba(customHex, 0.16));
+    } else {
+      document.body.style.removeProperty('--accent-color');
+      document.body.style.removeProperty('--accent-hover');
+      document.body.style.removeProperty('--accent-soft');
+    }
+
+    const data = loadSavedMeta();
+    data.theme = themeName;
+    if (customHex) data.customColor = customHex;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch {}
+  }
+
+  (() => {
+    const initData = loadSavedMeta();
+    customPlaylists = initData.playlists || {};
+    recentTrackNames = Array.isArray(initData.recent) ? initData.recent : [];
+    if (initData.customColor) customColorPicker.value = initData.customColor;
+    applyTheme(initData.theme || 'coral', initData.customColor || '#e05a3e');
+    refreshCustomPlaylistSelect();
+  })();
+
+  themeBtns.forEach(btn => btn.addEventListener('click', () => applyTheme(btn.dataset.theme)));
+  customColorPicker.addEventListener('input', () => applyTheme('custom', customColorPicker.value));
+
+  navModeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      navModeBtns.forEach(b => b.classList.remove('active'));
+      tabPanels.forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.tab).classList.add('active');
+      if (btn.dataset.tab === 'statsTab') renderStats();
+      if (btn.dataset.tab === 'albumsTab') renderAlbumGrid();
+    });
+  });
+
+  function renderBookmarks() {
+    const track = getCurrentTrack();
+    if (!track || !Array.isArray(track.bookmarks) || track.bookmarks.length === 0) {
+      bookmarkChips.innerHTML = `<span style="font-size:0.66rem; color:var(--text-sub);">しおり未登録</span>`;
+      return;
+    }
+    bookmarkChips.innerHTML = track.bookmarks.map((sec, idx) => `
+      <button type="button" class="bookmark-chip" data-sec="${sec}" title="クリックでジャンプ">
+        <span>#${idx + 1} ${formatTime(sec)}</span>
+      </button>
+    `).join('');
+
+    bookmarkChips.querySelectorAll('.bookmark-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const s = parseFloat(chip.dataset.sec);
+        if (!isNaN(s) && !isNaN(audio.duration)) {
+          audio.currentTime = Math.min(audio.duration, Math.max(0, s));
+          syncLyricsSmoothly(audio.currentTime, true);
+          if (audio.paused) playAudio();
+        }
+      });
+    });
+  }
+
+  addBookmarkBtn.addEventListener('click', () => {
+    const track = getCurrentTrack();
+    if (!track) return;
+    const t = Math.floor((audio.currentTime || 0) * 10) / 10;
+    const list = Array.isArray(track.bookmarks) ? [...track.bookmarks] : [];
+    if (!list.some(x => Math.abs(x - t) < 0.5)) {
+      list.push(t);
+      list.sort((a, b) => a - b);
+      track.bookmarks = list.slice(0, 8);
+      saveTrackMeta(track);
+      renderBookmarks();
+      renderStats();
+    }
+  });
+
+  clearBookmarksBtn.addEventListener('click', () => {
+    const track = getCurrentTrack();
+    if (!track) return;
+    track.bookmarks = [];
+    saveTrackMeta(track);
+    renderBookmarks();
+    renderStats();
+  });
+
+  function renderAlbumGrid() {
+    const folderMap = new Map();
+    tracks.forEach(t => {
+      if (!folderMap.has(t.folder)) {
+        folderMap.set(t.folder, { folder: t.folder, coverUrl: t.coverUrl || DEFAULT_ART_SRC, count: 0 });
+      }
+      folderMap.get(t.folder).count += 1;
+    });
+
+    if (folderMap.size === 0) {
+      albumGrid.innerHTML = `<div class="lyrics-empty" style="grid-column:1/-1;">フォルダまたは音楽ファイルを読み込むと一覧が表示されます。</div>`;
+      return;
+    }
+
+    albumGrid.innerHTML = [...folderMap.values()].map(item => `
+      <div class="album-card" data-folder="${escapeHtml(item.folder)}">
+        <img src="${item.coverUrl}" alt="${escapeHtml(item.folder)}" class="album-thumb" onerror="this.src='${DEFAULT_ART_SRC}'" />
+        <div class="album-name">${escapeHtml(item.folder)}</div>
+        <div class="album-count">${item.count} 曲</div>
+      </div>
+    `).join('');
+
+    albumGrid.querySelectorAll('.album-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const targetFolder = card.dataset.folder;
+        folderFilterSelect.value = targetFolder;
+        customPlaylistSelect.value = 'ALL_TRACKS';
+        renderPlaylist();
+        document.querySelector('.nav-mode-btn[data-tab="playlistTab"]').click();
+      });
+    });
+  }
+
+  function renderStats() {
+    statTrackCount.textContent = String(tracks.length);
+    const totalPlays = tracks.reduce((sum, t) => sum + (t.playCount || 0), 0);
+    statTotalPlays.textContent = String(totalPlays);
+    const favCount = tracks.filter(t => t.liked).length;
+    const lyricsCount = tracks.filter(t => t.parsedLines && t.parsedLines.some(l => !l.isEllipsisMarker && l.text)).length;
+    const totalBm = tracks.reduce((sum, t) => sum + ((t.bookmarks && t.bookmarks.length) || 0), 0);
+    statFavLyrics.textContent = `${favCount} / ${lyricsCount}`;
+    statBookmarks.textContent = String(totalBm);
+
+    const ranked = [...tracks].sort((a, b) => (b.playCount || 0) - (a.playCount || 0)).slice(0, 8);
+    if (ranked.length === 0) {
+      topPlayedList.innerHTML = `<div style="font-size:0.78rem; color:var(--text-sub); padding-top:4px;">まだ再生データがありません。</div>`;
+      return;
+    }
+    topPlayedList.innerHTML = ranked.map((t, i) => `
+      <div class="ranking-row">
+        <span>${i + 1}. ${escapeHtml(t.name)}</span>
+        <span style="color:var(--accent-hover); font-weight:700;">${t.playCount || 0} 回</span>
+      </div>
+    `).join('');
+  }
+
+  fontSizeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      fontSizeBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      lyricsBox.style.setProperty('--lyric-size', btn.dataset.size);
+    });
+  });
+
+  fsSizeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      fsSizeBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      fsLyricsStage.style.setProperty('--fs-lyric-size', btn.dataset.fsSize);
+    });
+  });
+
+  fsBgBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      fsBgBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      fsOverlay.setAttribute('data-fs-bg', btn.dataset.fsBg);
+    });
+  });
+
+  autoScrollToggleBtn.addEventListener('click', () => {
+    isAutoScroll = !isAutoScroll;
+    autoScrollToggleBtn.textContent = `自動スクロール: ${isAutoScroll ? 'ON' : 'OFF'}`;
+    autoScrollToggleBtn.classList.toggle('active', isAutoScroll);
+    if (isAutoScroll) syncLyricsSmoothly(audio.currentTime || 0, true);
+  });
+
+  seekBack10Btn.addEventListener('click', () => {
+    if (!isNaN(audio.duration)) audio.currentTime = Math.max(0, audio.currentTime - 10);
+  });
+
+  seekFwd10Btn.addEventListener('click', () => {
+    if (!isNaN(audio.duration)) audio.currentTime = Math.min(audio.duration, audio.currentTime + 10);
+  });
+
+  toggleMiniPlayerBtn.addEventListener('click', () => {
+    miniPlayerWidget.classList.toggle('visible');
+    toggleMiniPlayerBtn.classList.toggle('active', miniPlayerWidget.classList.contains('visible'));
+  });
+
+  closeMiniPlayerBtn.addEventListener('click', () => {
+    miniPlayerWidget.classList.remove('visible');
+    toggleMiniPlayerBtn.classList.remove('active');
+  });
+
+  miniPrevBtn.addEventListener('click', prevTrack);
+  miniNextBtn.addEventListener('click', nextTrack);
+  miniPlayPauseBtn.addEventListener('click', () => {
+    if (audio.paused) playAudio();
+    else pauseAudio();
+  });
+
+  function openFullscreenLyrics() {
+    const track = getCurrentTrack();
+    const artSrc = (track && track.coverUrl) ? track.coverUrl : DEFAULT_ART_SRC;
+    fsBgLayer.style.backgroundImage = `url("${artSrc}")`;
+    fsCoverImg.src = artSrc;
+    fsTrackTitle.textContent = track ? track.name : '曲が選択されていません';
+    fsTrackFolder.textContent = track ? track.folder : 'mimimi Fullscreen Lyrics';
+    fsPlayPauseBtn.textContent = audio.paused ? '再生' : '一時停止';
+    renderLyrics(track);
+    fsOverlay.classList.add('open');
+    activeLyricIndex = -1;
+    activeInterludeKey = null;
+    syncLyricsSmoothly(audio.currentTime || 0, true);
+  }
+
+  function closeFullscreenLyrics() {
+    fsOverlay.classList.remove('open');
+    activeLyricIndex = -1;
+    activeInterludeKey = null;
+    syncLyricsSmoothly(audio.currentTime || 0, true);
+  }
+
+  openFullscreenBtn.addEventListener('click', openFullscreenLyrics);
+  closeFullscreenBtn.addEventListener('click', closeFullscreenLyrics);
+  fsPlayPauseBtn.addEventListener('click', () => {
+    if (audio.paused) playAudio();
+    else pauseAudio();
+  });
+
+  exportCardPngBtn.addEventListener('click', () => {
+    const track = getCurrentTrack();
+    const activeRow = lyricsBox.querySelector('.lyric-line-row.active');
+    const firstRow = lyricsBox.querySelector('.lyric-line-row');
+    const lyricText = (activeRow && activeRow.dataset.plain) || (firstRow && firstRow.dataset.plain) || (track ? track.name : 'mimimi');
+
+    const cardCanvas = document.createElement('canvas');
+    cardCanvas.width = isSquareCard ? 900 : 1080;
+    cardCanvas.height = isSquareCard ? 900 : 600;
+    const cctx = cardCanvas.getContext('2d');
+
+    const accent = getComputedStyle(document.body).getPropertyValue('--accent-color').trim() || '#e05a3e';
+    cctx.fillStyle = '#0e1219';
+    cctx.fillRect(0, 0, cardCanvas.width, cardCanvas.height);
+
+    cctx.strokeStyle = accent;
+    cctx.lineWidth = 4;
+    cctx.strokeRect(24, 24, cardCanvas.width - 48, cardCanvas.height - 48);
+
+    cctx.fillStyle = accent;
+    cctx.font = 'bold 28px sans-serif';
+    cctx.fillText('mimimi', 64, 88);
+
+    cctx.fillStyle = '#98a2b3';
+    cctx.font = '22px sans-serif';
+    cctx.fillText(track ? `${track.name}  /  ${track.folder}` : 'No Track', 64, 128);
+
+    cctx.fillStyle = '#f3f5f8';
+    cctx.font = 'bold 42px sans-serif';
+    const chars = Array.from(lyricText);
+    let line = '';
+    let y = isSquareCard ? 360 : 260;
+    const maxWidth = cardCanvas.width - 128;
+    for (const ch of chars) {
+      const test = line + ch;
+      if (cctx.measureText(test).width > maxWidth) {
+        cctx.fillText(line, 64, y);
+        line = ch;
+        y += 64;
+      } else {
+        line = test;
+      }
+    }
+    if (line) cctx.fillText(line, 64, y);
+
+    const link = document.createElement('a');
+    link.download = `${track ? track.name : 'mimimi'}_lyric_card.png`;
+    link.href = cardCanvas.toDataURL('image/png');
+    link.click();
+  });
+
+  cycleVizModeBtn.addEventListener('click', () => {
+    vizModeIndex = (vizModeIndex + 1) % vizModes.length;
+    vizLabel.textContent = `MODE: ${vizModes[vizModeIndex]}`;
+  });
+
+  function updateAbUI() {
+    const aStr = abPointA !== null ? formatTime(abPointA) : '--';
+    const bStr = abPointB !== null ? formatTime(abPointB) : '--';
+    abRangeText.textContent = `A:${aStr} / B:${bStr}`;
+    toggleAbBtn.textContent = `A-B: ${isAbLoop ? 'ON' : 'OFF'}`;
+    toggleAbBtn.classList.toggle('active', isAbLoop);
+  }
+
+  setABtn.addEventListener('click', () => {
+    abPointA = audio.currentTime || 0;
+    if (abPointB !== null && abPointA >= abPointB) {
+      abPointB = null;
+      isAbLoop = false;
+    }
+    updateAbUI();
+  });
+
+  setBBtn.addEventListener('click', () => {
+    const cur = audio.currentTime || 0;
+    if (abPointA === null) abPointA = 0;
+    if (cur > abPointA) {
+      abPointB = cur;
+      isAbLoop = true;
+    }
+    updateAbUI();
+  });
+
+  toggleAbBtn.addEventListener('click', () => {
+    if (!isAbLoop && (abPointA === null || abPointB === null)) return;
+    isAbLoop = !isAbLoop;
+    updateAbUI();
+  });
+
+  selectFolderBtn.addEventListener('click', () => folderInput.click());
+  selectFilesBtn.addEventListener('click', () => fileInput.click());
+
+  folderInput.addEventListener('change', (e) => {
+    const items = Array.from(e.target.files).map(file => ({
+      file,
+      relativePath: file.webkitRelativePath || file.name
+    }));
+    handleImportedItems(items);
+    folderInput.value = '';
+  });
+
+  fileInput.addEventListener('change', (e) => {
+    const items = Array.from(e.target.files).map(file => ({
+      file,
+      relativePath: file.webkitRelativePath || file.name
+    }));
+    handleImportedItems(items);
+    fileInput.value = '';
+  });
+
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('dragover');
+  });
+
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+
+  dropZone.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+
+    const dtItems = e.dataTransfer.items;
+    if (dtItems && dtItems.length > 0 && typeof dtItems[0].webkitGetAsEntry === 'function') {
+      const entries = [];
+      for (const item of dtItems) {
+        const entry = item.webkitGetAsEntry();
+        if (entry) entries.push(entry);
+      }
+      const collected = [];
+      for (const entry of entries) {
+        await traverseFileTree(entry, '', collected);
+      }
+      handleImportedItems(collected);
+    } else {
+      const items = Array.from(e.dataTransfer.files).map(file => ({
+        file,
+        relativePath: file.webkitRelativePath || file.name
+      }));
+      handleImportedItems(items);
+    }
+  });
+
+  function traverseFileTree(entry, pathPrefix, resultList) {
+    return new Promise((resolve) => {
+      if (entry.isFile) {
+        entry.file((file) => {
+          resultList.push({ file, relativePath: pathPrefix + file.name });
+          resolve();
+        }, () => resolve());
+      } else if (entry.isDirectory) {
+        const dirReader = entry.createReader();
+        const readAllEntries = () => {
+          dirReader.readEntries(async (entries) => {
+            if (!entries.length) {
+              resolve();
+              return;
+            }
+            for (const child of entries) {
+              await traverseFileTree(child, pathPrefix + entry.name + '/', resultList);
+            }
+            readAllEntries();
+          }, () => resolve());
+        };
+        readAllEntries();
+      } else {
+        resolve();
+      }
+    });
+  }
+
+  function extractFolderName(relativePath) {
+    if (!relativePath || !relativePath.includes('/')) return '個別ファイル';
+    const parts = relativePath.split('/');
+    parts.pop();
+    return parts.join(' / ');
+  }
+
+  async function handleImportedItems(items) {
+    const audioItems = items.filter(({ file }) =>
+      file.type.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|flac|aac)$/i.test(file.name)
+    );
+    const lyricFileItems = items.filter(({ file }) => /\.(lrc|txt)$/i.test(file.name));
+    const imageItems = items.filter(({ file }) =>
+      file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(file.name)
+    );
+
+    for (const { file, relativePath } of imageItems) {
+      const folderName = extractFolderName(relativePath);
+      const isCoverLike = /(cover|folder|front|artwork|jacket)/i.test(file.name);
+      if (!folderCoverMap.has(folderName) || isCoverLike) {
+        folderCoverMap.set(folderName, URL.createObjectURL(file));
+      }
+    }
+
+    const lyricMap = new Map();
+    for (const { file } of lyricFileItems) {
+      const base = file.name.replace(/\.[^/.]+$/, '');
+      const isLrc = file.name.toLowerCase().endsWith('.lrc');
+      if (!lyricMap.has(base) || isLrc) {
+        lyricMap.set(base, await file.text());
+      }
+    }
+
+    const savedData = loadSavedMeta();
+    const savedTracks = savedData.tracks || {};
+    const hadNoTrack = currentTrackId === null;
+
+    audioItems.sort((a, b) => a.relativePath.localeCompare(b.relativePath, 'ja'));
+
+    for (const { file, relativePath } of audioItems) {
+      const baseName = file.name.replace(/\.[^/.]+$/, '');
+      const folderName = extractFolderName(relativePath);
+      const uniqueKey = `${folderName}::${baseName}`;
+      const existing = tracks.find(t => `${t.folder}::${t.name}` === uniqueKey);
+      const coverUrl = folderCoverMap.get(folderName) || DEFAULT_ART_SRC;
+
+      const stored = savedTracks[baseName] || {};
+      const importedLyric = lyricMap.get(baseName);
+      const finalLyrics = importedLyric !== undefined ? importedLyric : (stored.rawLyrics || '');
+
+      if (existing) {
+        if (coverUrl) existing.coverUrl = coverUrl;
+        if (importedLyric !== undefined) {
+          existing.rawLyrics = importedLyric;
+          existing.parsedLines = parseLyrics(importedLyric);
+          saveTrackMeta(existing);
+        }
+      } else {
+        tracks.push({
+          id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          name: baseName,
+          folder: folderName,
+          url: URL.createObjectURL(file),
+          coverUrl,
+          liked: Boolean(stored.liked),
+          playCount: Number(stored.playCount || 0),
+          tags: Array.isArray(stored.tags) ? stored.tags : [],
+          gainDb: Number(stored.gainDb || 0),
+          bookmarks: Array.isArray(stored.bookmarks) ? stored.bookmarks : [],
+          rawLyrics: finalLyrics,
+          parsedLines: parseLyrics(finalLyrics)
+        });
+      }
+    }
+
+    if (audioItems.length === 0) {
+      tracks.forEach(t => {
+        if (folderCoverMap.has(t.folder)) t.coverUrl = folderCoverMap.get(t.folder);
+      });
+      if (lyricFileItems.length > 0) {
+        for (const [baseName, text] of lyricMap.entries()) {
+          tracks.filter(t => t.name === baseName).forEach(target => {
+            target.rawLyrics = text;
+            target.parsedLines = parseLyrics(text);
+            saveTrackMeta(target);
+          });
+        }
+      }
+    }
+
+    updateFolderFilterOptions();
+    updateTagFilterOptions();
+    renderPlaylist();
+    renderAlbumGrid();
+    renderStats();
+
+    if (hadNoTrack && tracks.length > 0) {
+      loadTrackById(tracks[0].id);
+    } else if (currentTrackId) {
+      updateStatus();
+      const current = getCurrentTrack();
+      if (current) {
+        renderCoverArt(current);
+        renderLyrics(current);
+        renderBookmarks();
+      }
+    }
+  }
+
+  detectDupBtn.addEventListener('click', () => {
+    const byName = new Map();
+    tracks.forEach(t => {
+      const list = byName.get(t.name) || [];
+      list.push(t);
+      byName.set(t.name, list);
+    });
+    const dups = [...byName.entries()].filter(([, list]) => list.length > 1);
+    if (dups.length === 0) {
+      alert('同じ曲名の重複ファイルは見つかりませんでした。');
+    } else {
+      const summary = dups.map(([name, list]) => `${name} (${list.length}件: ${list.map(x => x.folder).join(', ')})`).join('\n');
+      alert(`重複の可能性がある曲:\n\n${summary}`);
+    }
+  });
+
+  function renderCoverArt(track) {
+    const src = (track && track.coverUrl) ? track.coverUrl : DEFAULT_ART_SRC;
+    const altText = track ? track.name : 'mimimi';
+    coverArt.innerHTML = `<img src="${src}" alt="${escapeHtml(altText)}" onerror="this.parentElement.textContent='mimimi'" />`;
+    fsCoverImg.src = src;
+    fsBgLayer.style.backgroundImage = `url("${src}")`;
+    if (track) {
+      fsTrackTitle.textContent = track.name;
+      fsTrackFolder.textContent = track.folder;
+      miniTrackTitle.textContent = track.name;
+    }
+  }
+
+  function updateArtworkAmbientMotion(isAmbient) {
+    coverArt.classList.toggle('ambient-motion', Boolean(isAmbient && !audio.paused));
+  }
+
+  function updateFolderFilterOptions() {
+    const currentSelection = folderFilterSelect.value;
+    const folders = Array.from(new Set(tracks.map(t => t.folder)));
+    folderFilterSelect.innerHTML = `<option value="ALL">すべてのフォルダ (${folders.length})</option>` +
+      folders.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('');
+    folderFilterSelect.value = folders.includes(currentSelection) ? currentSelection : 'ALL';
+  }
+
+  function updateTagFilterOptions() {
+    const currentTag = tagFilterSelect.value;
+    const allTags = Array.from(new Set(tracks.flatMap(t => t.tags || [])));
+    tagFilterSelect.innerHTML = `<option value="ALL">すべてのタグ (${allTags.length})</option>` +
+      allTags.map(tg => `<option value="${escapeHtml(tg)}">#${escapeHtml(tg)}</option>`).join('');
+    tagFilterSelect.value = allTags.includes(currentTag) ? currentTag : 'ALL';
+  }
+
+  addTagToCurrentBtn.addEventListener('click', () => {
+    const track = getCurrentTrack();
+    const rawTag = tagAssignInput.value.trim().replace(/^#/, '');
+    if (!track || !rawTag) return;
+    track.tags = Array.from(new Set([...(track.tags || []), rawTag]));
+    tagAssignInput.value = '';
+    saveTrackMeta(track);
+    updateTagFilterOptions();
+    renderPlaylist();
+  });
+
+  tagFilterSelect.addEventListener('change', renderPlaylist);
+  lyricsFilterSelect.addEventListener('change', renderPlaylist);
+
+  function refreshCustomPlaylistSelect() {
+    const prevVal = customPlaylistSelect.value;
+    const names = Object.keys(customPlaylists);
+    customPlaylistSelect.innerHTML =
+      `<option value="ALL_TRACKS">すべての曲</option>` +
+      `<option value="__RECENT__">最近再生した曲 (${recentTrackNames.length})</option>` +
+      names.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)} (${customPlaylists[name].length})</option>`).join('');
+    customPlaylistSelect.value = ['ALL_TRACKS', '__RECENT__', ...names].includes(prevVal) ? prevVal : 'ALL_TRACKS';
+  }
+
+  createPlaylistBtn.addEventListener('click', () => {
+    const name = newPlaylistNameInput.value.trim();
+    if (!name) return;
+    if (!customPlaylists[name]) {
+      customPlaylists[name] = [];
+      persistAllMeta();
+    }
+    newPlaylistNameInput.value = '';
+    refreshCustomPlaylistSelect();
+    customPlaylistSelect.value = name;
+    renderPlaylist();
+  });
+
+  favShufflePlayBtn.addEventListener('click', () => {
+    const favs = tracks.filter(t => t.liked);
+    if (favs.length === 0) {
+      alert('お気に入り登録されている曲がありません。');
+      return;
+    }
+    isShuffle = true;
+    shuffleBtn.classList.add('active');
+    const picked = favs[Math.floor(Math.random() * favs.length)];
+    loadTrackById(picked.id);
+    playAudio();
+  });
+
+  customPlaylistSelect.addEventListener('change', renderPlaylist);
+
+  exportJsonBtn.addEventListener('click', () => {
+    const saved = loadSavedMeta();
+    const payload = {
+      app: 'mimimi',
+      exportedAt: new Date().toISOString(),
+      playlists: customPlaylists,
+      recent: recentTrackNames,
+      tracksMeta: saved.tracks || {}
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'mimimi_library.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  importJsonBtn.addEventListener('click', () => jsonInput.click());
+  jsonInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text());
+      if (parsed.playlists && typeof parsed.playlists === 'object') {
+        customPlaylists = { ...customPlaylists, ...parsed.playlists };
+      }
+      if (Array.isArray(parsed.recent)) recentTrackNames = parsed.recent;
+      const currentSaved = loadSavedMeta();
+      currentSaved.tracks = { ...(currentSaved.tracks || {}), ...(parsed.tracksMeta || {}) };
+      currentSaved.playlists = customPlaylists;
+      currentSaved.recent = recentTrackNames;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(currentSaved));
+
+      tracks.forEach(t => {
+        const meta = currentSaved.tracks[t.name];
+        if (meta) {
+          if (typeof meta.liked === 'boolean') t.liked = meta.liked;
+          if (typeof meta.playCount === 'number') t.playCount = meta.playCount;
+          if (Array.isArray(meta.tags)) t.tags = meta.tags;
+          if (typeof meta.gainDb === 'number') t.gainDb = meta.gainDb;
+          if (Array.isArray(meta.bookmarks)) t.bookmarks = meta.bookmarks;
+          if (typeof meta.rawLyrics === 'string') {
+            t.rawLyrics = meta.rawLyrics;
+            t.parsedLines = parseLyrics(meta.rawLyrics);
+          }
+        }
+      });
+
+      refreshCustomPlaylistSelect();
+      updateTagFilterOptions();
+      updateLikeUI();
+      const cur = getCurrentTrack();
+      if (cur) {
+        applyTrackGain(cur.gainDb || 0);
+        renderLyrics(cur);
+        renderBookmarks();
+      }
+      renderPlaylist();
+      renderStats();
+    } catch {
+      alert('JSONファイルの読み込みに失敗しました。');
+    }
+    jsonInput.value = '';
+  });
+
+  function getCurrentTrack() {
+    return tracks.find(t => t.id === currentTrackId) || null;
+  }
+
+  function getFilteredAndSortedTracks() {
+    const query = searchInput.value.trim().toLowerCase();
+    const folderFilter = folderFilterSelect.value;
+    const tagFilter = tagFilterSelect.value;
+    const lyricsFilter = lyricsFilterSelect.value;
+    const sortMode = sortSelect.value;
+    const selectedPl = customPlaylistSelect.value;
+
+    let list = tracks.filter(track => {
+      if (selectedPl === '__RECENT__') {
+        if (!recentTrackNames.includes(track.name)) return false;
+      } else if (selectedPl !== 'ALL_TRACKS') {
+        if (!(customPlaylists[selectedPl] || []).includes(track.name)) return false;
+      }
+      if (onlyFavorites && !track.liked) return false;
+      if (folderFilter !== 'ALL' && track.folder !== folderFilter) return false;
+      if (tagFilter !== 'ALL' && !(track.tags || []).includes(tagFilter)) return false;
+      const hasLyrics = track.parsedLines && track.parsedLines.some(l => !l.isEllipsisMarker && l.text);
+      if (lyricsFilter === 'WITH_LYRICS' && !hasLyrics) return false;
+      if (lyricsFilter === 'NO_LYRICS' && hasLyrics) return false;
+
+      const tagMatch = (track.tags || []).some(tg => tg.toLowerCase().includes(query));
+      if (query && !track.name.toLowerCase().includes(query) && !track.folder.toLowerCase().includes(query) && !tagMatch) {
+        return false;
+      }
+      return true;
+    });
+
+    if (selectedPl === '__RECENT__') {
+      list = [...list].sort((a, b) => recentTrackNames.indexOf(a.name) - recentTrackNames.indexOf(b.name));
+    } else if (selectedPl !== 'ALL_TRACKS') {
+      const order = customPlaylists[selectedPl] || [];
+      list = [...list].sort((a, b) => {
+        const ia = order.indexOf(a.name);
+        const ib = order.indexOf(b.name);
+        return (ia === -1 ? 9999 : ia) - (ib === -1 ? 9999 : ib);
+      });
+    } else if (sortMode === 'TITLE') {
+      list = [...list].sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    } else if (sortMode === 'FOLDER') {
+      list = [...list].sort((a, b) => a.folder.localeCompare(b.folder, 'ja') || a.name.localeCompare(b.name, 'ja'));
+    } else if (sortMode === 'PLAY_COUNT') {
+      list = [...list].sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
+    }
+    return list;
+  }
+
+  function parseTimestampToSeconds(minStr, secStr) {
+    return parseInt(minStr, 10) * 60 + parseFloat(secStr);
+  }
+
+  function formatRubyHtml(textWithRuby) {
+    const escaped = escapeHtml(textWithRuby);
+    return escaped.replace(/\|([^《\s]+)《([^》]+)》/g, '<ruby>$1<rt>$2</rt></ruby>');
+  }
+
+  function isEllipsisMarkerText(text) {
+    const cleaned = (text || '').trim();
+    if (!cleaned) return false;
+    return /^(\.{2,}|…+|・{2,}|･{2,})$/.test(cleaned);
+  }
+
+  function parseLyrics(text) {
+    if (!text || !text.trim()) return [];
+    const lines = text.split(/\r?\n/);
+    const lineTagRegex = /\[(\d{1,2}):(\d{2}(?:\.\d{1,3})?)\]/g;
+    const anyInlineRegex = /<\d{1,2}:\d{2}(?:\.\d{1,3})?>/g;
+    const entries = [];
+
+    for (const rawLine of lines) {
+      const trimmed = rawLine.trim();
+      if (!trimmed) continue;
+      if (/^\[[a-zA-Z]{2,}:.*\]$/.test(trimmed)) continue;
+
+      const lineTimes = [...trimmed.matchAll(lineTagRegex)].map(m => parseTimestampToSeconds(m[1], m[2]));
+      const withoutLineTags = trimmed.replace(lineTagRegex, '').trim();
+      if (!withoutLineTags) continue;
+
+      let sideNote = '';
+      let mainPart = withoutLineTags;
+      const noteSplitIdx = withoutLineTags.indexOf(' // ');
+      if (noteSplitIdx !== -1) {
+        sideNote = withoutLineTags.slice(noteSplitIdx + 4).trim();
+        mainPart = withoutLineTags.slice(0, noteSplitIdx).trim();
+      }
+
+      const inlineMatches = [...mainPart.matchAll(anyInlineRegex)];
+      let chars = [];
+
+      if (inlineMatches.length > 0) {
+        let currentCharTime = lineTimes.length > 0 ? lineTimes[0] : null;
+        const firstTagMatch = mainPart.match(/<(\d{1,2}):(\d{2}(?:\.\d{1,3})?)>/);
+        if (firstTagMatch && firstTagMatch.index > 0) {
+          for (const ch of Array.from(mainPart.slice(0, firstTagMatch.index))) {
+            chars.push({ char: ch, start: currentCharTime, end: null });
+          }
+        }
+
+        const tokenRegex = /<(\d{1,2}):(\d{2}(?:\.\d{1,3})?)>([^<]*)/g;
+        let tokenMatch;
+        while ((tokenMatch = tokenRegex.exec(mainPart)) !== null) {
+          const tSec = parseTimestampToSeconds(tokenMatch[1], tokenMatch[2]);
+          const segChars = Array.from(tokenMatch[3] || '');
+          if (segChars.length === 0) {
+            currentCharTime = tSec;
+            continue;
+          }
+          for (let i = 0; i < segChars.length; i++) {
+            chars.push({ char: segChars[i], start: tSec + i * 0.08, end: null });
+          }
+          currentCharTime = tSec;
+        }
+
+        for (let i = 0; i < chars.length; i++) {
+          if (chars[i].start !== null) {
+            chars[i].end = (i + 1 < chars.length && chars[i + 1].start !== null && chars[i + 1].start > chars[i].start)
+              ? chars[i + 1].start
+              : chars[i].start + 0.25;
+          }
+        }
+      }
+
+      const plainText = mainPart.replace(anyInlineRegex, '').trim();
+      if (!plainText && chars.length === 0) continue;
+
+      const isMarker = isEllipsisMarkerText(plainText);
+      const lineStart = lineTimes.length > 0 ? lineTimes[0] : (chars.length > 0 ? chars[0].start : null);
+      const lineEnd = chars.length > 0 ? chars[chars.length - 1].end : (lineStart !== null ? lineStart + 1.5 : null);
+
+      const targetTimes = lineTimes.length > 1 ? lineTimes : [lineStart];
+      for (const lt of targetTimes) {
+        entries.push({
+          time: lt,
+          endTime: lineEnd,
+          text: isMarker ? '' : plainText,
+          isEllipsisMarker: isMarker,
+          sideNote,
+          chars: (!isMarker && chars.length > 0) ? chars : null
+        });
+      }
+    }
+
+    if (entries.some(e => e.time !== null)) {
+      entries.sort((a, b) => (a.time ?? Infinity) - (b.time ?? Infinity));
+    }
+
+    for (let i = 0; i < entries.length; i++) {
+      const nextLineStart = (i + 1 < entries.length && entries[i + 1].time !== null) ? entries[i + 1].time : null;
+      if (entries[i].chars && entries[i].chars.length > 0) {
+        const chArr = entries[i].chars;
+        for (let j = 0; j < chArr.length; j++) {
+          if (chArr[j].start === null) continue;
+          if (j + 1 < chArr.length && chArr[j + 1].start !== null) {
+            chArr[j].end = chArr[j + 1].start;
+          } else if (nextLineStart !== null && nextLineStart > chArr[j].start) {
+            chArr[j].end = Math.min(nextLineStart, chArr[j].start + 0.6);
+          } else {
+            chArr[j].end = chArr[j].start + 0.25;
+          }
+        }
+        entries[i].endTime = chArr[chArr.length - 1].end;
+      } else if (entries[i].time !== null) {
+        entries[i].endTime = nextLineStart !== null ? nextLineStart : entries[i].time + 2.5;
+      }
+    }
+
+    return entries;
+  }
+
+  function updateOffsetBadge() {
+    const sign = lyricOffset > 0 ? '+' : '';
+    lyricOffsetBadge.textContent = `ズレ: ${sign}${lyricOffset.toFixed(1)}s`;
+  }
+
+  offsetMinusBtn.addEventListener('click', () => {
+    lyricOffset = Math.round((lyricOffset - 0.5) * 10) / 10;
+    updateOffsetBadge();
+    syncLyricsSmoothly(audio.currentTime || 0, true);
+  });
+
+  offsetPlusBtn.addEventListener('click', () => {
+    lyricOffset = Math.round((lyricOffset + 0.5) * 10) / 10;
+    updateOffsetBadge();
+    syncLyricsSmoothly(audio.currentTime || 0, true);
+  });
+
+  offsetResetBtn.addEventListener('click', () => {
+    lyricOffset = 0;
+    updateOffsetBadge();
+    syncLyricsSmoothly(audio.currentTime || 0, true);
+  });
+
+  lyricSearchInput.addEventListener('input', () => {
+    const track = getCurrentTrack();
+    if (track) renderLyrics(track);
+  });
+
+  function buildLineInnerHtml(line) {
+    if (Array.isArray(line.chars) && line.chars.length > 0) {
+      return line.chars.map((c, cIdx) => {
+        const startAttr = c.start !== null ? `data-start="${c.start}"` : '';
+        const endAttr = c.end !== null ? `data-end="${c.end}"` : '';
+        const chHtml = formatRubyHtml(c.char);
+        return `<span class="lyric-char" data-char-idx="${cIdx}" ${startAttr} ${endAttr}>${chHtml}</span>`;
+      }).join('');
+    }
+    return formatRubyHtml(line.text);
+  }
+
+  function buildInterludeHtml(gapStart, gapEnd, isFs = false) {
+    const cls = isFs ? 'fs-interlude' : 'lyric-interlude';
+    return `
+      <div class="${cls}" data-gap-start="${gapStart}" data-gap-end="${gapEnd}" title="クリックで次の歌詞へ移動">
+        <span class="interlude-dot"></span>
+        <span class="interlude-dot"></span>
+        <span class="interlude-dot"></span>
+      </div>
+    `;
+  }
+
+  function renderLyrics(track) {
+    activeLyricIndex = -1;
+    activeInterludeKey = null;
+    lyricsEditor.style.display = 'none';
+    saveLyricsBtn.style.display = 'none';
+    stampLineBtn.style.display = 'none';
+    stampCharBtn.style.display = 'none';
+    insertSampleLrcBtn.style.display = 'none';
+    editLyricsBtn.style.display = 'inline-block';
+    lyricsBox.style.display = 'block';
+
+    const hasRaw = Boolean(track && track.rawLyrics && track.rawLyrics.trim());
+    exportLrcBtn.style.display = hasRaw ? 'inline-block' : 'none';
+
+    const displayableLines = (track && track.parsedLines) ? track.parsedLines : [];
+    const hasVisibleText = displayableLines.some(l => !l.isEllipsisMarker && l.text);
+
+    if (!track || !hasVisibleText) {
+      lyricsModeBadge.textContent = '歌詞未設定';
+      updateArtworkAmbientMotion(true);
+      lyricsBox.innerHTML = `
+        <div class="lyrics-empty">
+          <p>${track ? `「${escapeHtml(track.name)}」の歌詞はまだありません。` : '曲が選択されていません。'}</p>
+          <p>通常LRCの「...」行は自動で間奏ドット演出へ変換され、<br>拡張LRC（<code>&lt;00:12.34&gt;</code>）では「...」演出をオフにしてスッキリ表示します。</p>
+        </div>
+      `;
+      fsLyricsStage.innerHTML = `<div class="lyrics-empty"><p>歌詞が登録されていません。</p></div>`;
+      return;
+    }
+
+    const isExtendedLrc = displayableLines.some(l => Array.isArray(l.chars) && l.chars.length > 0);
+    const isSynced = displayableLines.some(l => l.time !== null);
+
+    if (isExtendedLrc) lyricsModeBadge.textContent = '拡張LRC（間奏ドットOFF）';
+    else if (isSynced) lyricsModeBadge.textContent = '通常LRC（...間奏演出ON）';
+    else lyricsModeBadge.textContent = '通常テキスト歌詞';
+
+    const kw = lyricSearchInput.value.trim().toLowerCase();
+    let firstMatchedEl = null;
+    const normalHtmlParts = [];
+    const fsHtmlParts = [];
+
+    const firstLineTime = displayableLines.find(l => l.time !== null)?.time ?? null;
+    if (!isExtendedLrc && isSynced && firstLineTime !== null && firstLineTime >= 5.0) {
+      const introGapStart = 0.5;
+      const introGapEnd = Math.max(introGapStart + 1.0, firstLineTime - 0.8);
+      normalHtmlParts.push(buildInterludeHtml(introGapStart, introGapEnd, false));
+      fsHtmlParts.push(buildInterludeHtml(introGapStart, introGapEnd, true));
+    }
+
+    displayableLines.forEach((line, idx) => {
+      if (line.isEllipsisMarker) {
+        if (!isExtendedLrc && line.time !== null) {
+          const gapStart = line.time;
+          const gapEnd = line.endTime !== null && line.endTime > gapStart ? line.endTime : gapStart + 4.0;
+          normalHtmlParts.push(buildInterludeHtml(gapStart, gapEnd, false));
+          fsHtmlParts.push(buildInterludeHtml(gapStart, gapEnd, true));
+        }
+        return;
+      }
+
+      const dataTime = line.time !== null ? `data-time="${line.time}"` : '';
+      const isMatched = kw && (line.text.toLowerCase().includes(kw) || (line.sideNote || '').toLowerCase().includes(kw));
+      const innerHtml = buildLineInnerHtml(line);
+      const noteHtml = line.sideNote ? `<span class="lyric-side-note">${escapeHtml(line.sideNote)}</span>` : '';
+
+      normalHtmlParts.push(
+        `<div class="lyric-line-row ${isMatched ? 'matched' : ''}" data-index="${idx}" data-plain="${escapeHtml(line.text)}" ${dataTime}>
+          <div class="lyric-main-text">${innerHtml}</div>${noteHtml}
+        </div>`
+      );
+      fsHtmlParts.push(
+        `<div class="fs-line ${isMatched ? 'matched' : ''}" data-index="${idx}" ${dataTime}>
+          <span style="flex:1;">${innerHtml}</span>${noteHtml}
+        </div>`
+      );
+
+      const nextLine = displayableLines[idx + 1];
+      if (!isExtendedLrc && isSynced && nextLine && !nextLine.isEllipsisMarker && nextLine.time !== null) {
+        const lineFinishedAt = line.time !== null ? line.time + 2.2 : 0;
+        const gapStart = lineFinishedAt + 1.2;
+        const gapEnd = nextLine.time - 0.8;
+        if (gapEnd - gapStart >= INTERLUDE_MIN_GAP) {
+          normalHtmlParts.push(buildInterludeHtml(gapStart, gapEnd, false));
+          fsHtmlParts.push(buildInterludeHtml(gapStart, gapEnd, true));
+        }
+      }
+    });
+
+    lyricsBox.innerHTML = normalHtmlParts.join('');
+    fsLyricsStage.innerHTML = fsHtmlParts.join('');
+
+    const bindLineClick = (el) => {
+      el.addEventListener('click', () => {
+        const t = parseFloat(el.dataset.time);
+        if (!isNaN(t) && !isNaN(audio.duration)) {
+          audio.currentTime = Math.max(0, t - lyricOffset);
+          if (audio.paused) playAudio();
+        }
+      });
+    };
+
+    const bindInterludeClick = (el) => {
+      el.addEventListener('click', () => {
+        const targetTime = parseFloat(el.dataset.gapEnd);
+        if (!isNaN(targetTime) && !isNaN(audio.duration)) {
+          audio.currentTime = Math.max(0, targetTime - lyricOffset + 0.1);
+          if (audio.paused) playAudio();
+        }
+      });
+    };
+
+    lyricsBox.querySelectorAll('.lyric-line-row').forEach(el => {
+      if (!firstMatchedEl && el.classList.contains('matched')) firstMatchedEl = el;
+      bindLineClick(el);
+    });
+
+    fsLyricsStage.querySelectorAll('.fs-line').forEach(bindLineClick);
+    lyricsBox.querySelectorAll('.lyric-interlude').forEach(bindInterludeClick);
+    fsLyricsStage.querySelectorAll('.fs-interlude').forEach(bindInterludeClick);
+
+    if (firstMatchedEl && isAutoScroll) {
+      firstMatchedEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
+  function updateCharHighlightsInLine(lineEl, adjustedTime) {
+    const charSpans = lineEl.querySelectorAll('.lyric-char');
+    if (charSpans.length === 0) return;
+
+    charSpans.forEach(span => {
+      const start = parseFloat(span.dataset.start);
+      const end = parseFloat(span.dataset.end);
+
+      if (isNaN(start)) {
+        span.classList.remove('singing', 'sung');
+        span.style.setProperty('--p', '100%');
+        return;
+      }
+
+      const dur = (!isNaN(end) && end > start) ? (end - start) : 0.25;
+
+      if (adjustedTime >= end) {
+        span.style.setProperty('--p', '100%');
+        span.classList.add('sung');
+        span.classList.remove('singing');
+      } else if (adjustedTime >= start) {
+        const ratio = Math.max(0, Math.min(1, (adjustedTime - start) / dur));
+        span.style.setProperty('--p', `${(ratio * 100).toFixed(2)}%`);
+        span.classList.add('singing');
+        span.classList.remove('sung');
+      } else {
+        span.style.setProperty('--p', '0%');
+        span.classList.remove('singing', 'sung');
+      }
+    });
+  }
+
+  function formatStampTag(seconds, isInline = false) {
+    const t = Math.max(0, seconds || 0);
+    const min = Math.floor(t / 60);
+    const sec = (t % 60).toFixed(2).padStart(5, '0');
+    return isInline
+      ? `<${String(min).padStart(2, '0')}:${sec}>`
+      : `[${String(min).padStart(2, '0')}:${sec}] `;
+  }
+
+  function syncStage(stageEl, lineSelector, interludeSelector, track, adjustedTime, force) {
+    const lines = track.parsedLines;
+    let idx = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].time !== null && adjustedTime >= lines[i].time) {
+        idx = i;
+      } else if (lines[i].time > adjustedTime) {
+        break;
+      }
+    }
+
+    const currentEntry = idx >= 0 ? lines[idx] : null;
+    const activeDataIndex = (currentEntry && !currentEntry.isEllipsisMarker) ? idx : -1;
+
+    const lineEls = stageEl.querySelectorAll(lineSelector);
+    const interludeEls = stageEl.querySelectorAll(interludeSelector);
+
+    let matchedInterludeKey = null;
+    interludeEls.forEach((el, i) => {
+      const gs = parseFloat(el.dataset.gapStart);
+      const ge = parseFloat(el.dataset.gapEnd);
+      const inGap = !isNaN(gs) && !isNaN(ge) && adjustedTime >= gs && adjustedTime < ge;
+      el.classList.toggle('visible', inGap);
+      if (inGap && matchedInterludeKey === null) {
+        matchedInterludeKey = `${i}:${gs}-${ge}`;
+      }
+    });
+
+    if (force || activeDataIndex !== activeLyricIndex) {
+      let activeEl = null;
+      lineEls.forEach(el => {
+        const rowDataIdx = parseInt(el.dataset.index, 10);
+        const isAct = rowDataIdx === activeDataIndex;
+        el.classList.toggle('active', isAct);
+        if (isAct) activeEl = el;
+        if (!isAct) {
+          el.querySelectorAll('.lyric-char').forEach(span => {
+            span.classList.remove('singing');
+            const start = parseFloat(span.dataset.start);
+            if (!isNaN(start) && adjustedTime >= start) {
+              span.style.setProperty('--p', '100%');
+              span.classList.add('sung');
+            } else {
+              span.style.setProperty('--p', '0%');
+              span.classList.remove('sung');
+            }
+          });
+        }
+      });
+
+      if (activeEl && isAutoScroll) {
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+
+    if (matchedInterludeKey && matchedInterludeKey !== activeInterludeKey) {
+      const visibleEl = stageEl.querySelector(`${interludeSelector}.visible`);
+      if (visibleEl && isAutoScroll) {
+        visibleEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+
+    if (activeDataIndex >= 0) {
+      const targetRow = stageEl.querySelector(`${lineSelector}[data-index="${activeDataIndex}"]`);
+      if (targetRow) updateCharHighlightsInLine(targetRow, adjustedTime);
+    }
+
+    return { idx: activeDataIndex, matchedInterludeKey };
+  }
+
+  function syncLyricsSmoothly(currentTime, force = false) {
+    const track = getCurrentTrack();
+    if (!track || !track.parsedLines || track.parsedLines.length === 0) {
+      miniCurrentLyric.textContent = '---';
+      updateArtworkAmbientMotion(true);
+      return;
+    }
+    if (!track.parsedLines.some(l => l.time !== null)) {
+      const firstLine = track.parsedLines.find(l => !l.isEllipsisMarker);
+      miniCurrentLyric.textContent = firstLine ? firstLine.text : '---';
+      updateArtworkAmbientMotion(true);
+      return;
+    }
+
+    const adjustedTime = currentTime + lyricOffset;
+    const normalRes = syncStage(lyricsBox, '.lyric-line-row', '.lyric-interlude', track, adjustedTime, force);
+    if (fsOverlay.classList.contains('open')) {
+      syncStage(fsLyricsStage, '.fs-line', '.fs-interlude', track, adjustedTime, force);
+    }
+    activeLyricIndex = normalRes.idx;
+    activeInterludeKey = normalRes.matchedInterludeKey;
+
+    if (normalRes.matchedInterludeKey) {
+      miniCurrentLyric.textContent = '（間奏中）';
+      updateArtworkAmbientMotion(true);
+    } else if (normalRes.idx >= 0 && track.parsedLines[normalRes.idx]) {
+      miniCurrentLyric.textContent = track.parsedLines[normalRes.idx].text;
+      updateArtworkAmbientMotion(false);
+    } else {
+      miniCurrentLyric.textContent = '---';
+      updateArtworkAmbientMotion(true);
+    }
+  }
+
+  function smoothLyricsLoop() {
+    if (!audio.paused && !isNaN(audio.duration)) {
+      const cur = audio.currentTime;
+      seekBar.value = (cur / audio.duration) * 100;
+      currentTimeEl.textContent = formatTime(cur);
+      if (fsOverlay.classList.contains('open')) {
+        fsSeekBar.value = (cur / audio.duration) * 100;
+        fsCurrentTime.textContent = formatTime(cur);
+      }
+      syncLyricsSmoothly(cur, false);
+    }
+    requestAnimationFrame(smoothLyricsLoop);
+  }
+
+  editLyricsBtn.addEventListener('click', () => {
+    const track = getCurrentTrack();
+    if (!track) {
+      alert('先に曲を選択してください。');
+      return;
+    }
+    lyricsBox.style.display = 'none';
+    editLyricsBtn.style.display = 'none';
+    exportLrcBtn.style.display = 'none';
+    lyricsEditor.style.display = 'block';
+    saveLyricsBtn.style.display = 'inline-block';
+    stampLineBtn.style.display = 'inline-block';
+    stampCharBtn.style.display = 'inline-block';
+    insertSampleLrcBtn.style.display = 'inline-block';
+    lyricsEditor.value = track.rawLyrics || '';
+    lyricsEditor.focus();
+  });
+
+  insertSampleLrcBtn.addEventListener('click', () => {
+    lyricsEditor.value =
+`[00:02.00] |光《ひかり》の|粒《つぶ》が揺れる // Lights shimmer softly
+[00:08.00] ...
+[00:15.00] 間奏を抜けてサビへ // Into the chorus`;
+  });
+
+  stampLineBtn.addEventListener('click', () => {
+    const pos = lyricsEditor.selectionStart;
+    const text = lyricsEditor.value;
+    const lineStart = text.lastIndexOf('\n', pos - 1) + 1;
+    const lineEndIdx = text.indexOf('\n', pos);
+    const lineEnd = lineEndIdx === -1 ? text.length : lineEndIdx;
+    const currentLine = text.slice(lineStart, lineEnd);
+    const tag = formatStampTag(audio.currentTime || 0, false);
+    const cleanedLine = currentLine.replace(/^\[(\d{1,2}):(\d{2}(?:\.\d{1,3})?)\]\s*/, '');
+    lyricsEditor.value = text.slice(0, lineStart) + tag + cleanedLine + text.slice(lineEnd);
+    lyricsEditor.focus();
+  });
+
+  stampCharBtn.addEventListener('click', () => {
+    const pos = lyricsEditor.selectionStart;
+    const text = lyricsEditor.value;
+    const tag = formatStampTag(audio.currentTime || 0, true);
+    lyricsEditor.value = text.slice(0, pos) + tag + text.slice(pos);
+    const nextPos = pos + tag.length;
+    lyricsEditor.focus();
+    lyricsEditor.setSelectionRange(nextPos, nextPos);
+  });
+
+  saveLyricsBtn.addEventListener('click', () => {
+    const track = getCurrentTrack();
+    if (!track) return;
+    track.rawLyrics = lyricsEditor.value;
+    track.parsedLines = parseLyrics(track.rawLyrics);
+    saveTrackMeta(track);
+    renderLyrics(track);
+    renderPlaylist();
+    renderStats();
+  });
+
+  exportLrcBtn.addEventListener('click', () => {
+    const track = getCurrentTrack();
+    if (!track || !track.rawLyrics) return;
+    const blob = new Blob([track.rawLyrics], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${track.name}.lrc`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  function updateMediaSession(track) {
+    if (!('mediaSession' in navigator) || !track) return;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: track.name,
+      artist: track.folder || 'mimimi',
+      album: 'mimimi',
+      artwork: [{ src: track.coverUrl || DEFAULT_ART_SRC, sizes: '256x256', type: 'image/png' }]
+    });
+    navigator.mediaSession.setActionHandler('play', playAudio);
+    navigator.mediaSession.setActionHandler('pause', pauseAudio);
+    navigator.mediaSession.setActionHandler('previoustrack', prevTrack);
+    navigator.mediaSession.setActionHandler('nexttrack', nextTrack);
+  }
+
+  function recordPlayHistory(track) {
+    if (!track) return;
+    recentTrackNames = [track.name, ...recentTrackNames.filter(n => n !== track.name)].slice(0, 30);
+    if (countedPlayForTrackId !== track.id) {
+      countedPlayForTrackId = track.id;
+      track.playCount = (track.playCount || 0) + 1;
+    }
+    saveTrackMeta(track);
+    refreshCustomPlaylistSelect();
+    renderPlaylist();
+    renderStats();
+  }
+
+  function applyTrackGain(db) {
+    const clamped = Math.max(-6, Math.min(6, Number(db) || 0));
+    trackGainSlider.value = clamped;
+    trackGainVal.textContent = `${clamped > 0 ? '+' : ''}${clamped} dB`;
+    if (trackGainNode) {
+      trackGainNode.gain.value = Math.pow(10, clamped / 20);
+    }
+  }
+
+  trackGainSlider.addEventListener('input', () => {
+    const track = getCurrentTrack();
+    const val = parseFloat(trackGainSlider.value);
+    if (track) {
+      track.gainDb = val;
+      saveTrackMeta(track);
+    }
+    applyTrackGain(val);
+  });
+
+  function loadTrackById(id) {
+    const track = tracks.find(t => t.id === id);
+    if (!track) return;
+    currentTrackId = track.id;
+    countedPlayForTrackId = null;
+    abPointA = null;
+    abPointB = null;
+    isAbLoop = false;
+    lyricOffset = 0;
+    updateAbUI();
+    updateOffsetBadge();
+    applyTrackGain(track.gainDb || 0);
+
+    audio.src = track.url;
+    applyPlaybackRateAndPitch();
+    trackFolder.textContent = track.folder;
+    trackTitle.textContent = track.name;
+    renderCoverArt(track);
+    updateMediaSession(track);
+    updateLikeUI();
+    updateStatus();
+    renderPlaylist();
+    renderLyrics(track);
+    renderBookmarks();
+  }
+
+  function updateStatus() {
+    if (tracks.length === 0 || !currentTrackId) {
+      trackStatus.textContent = '0 / 0 曲';
+      return;
+    }
+    const idx = tracks.findIndex(t => t.id === currentTrackId);
+    trackStatus.textContent = `${idx + 1} / ${tracks.length} 曲`;
+  }
+
+  function rebuildAudioRouting() {
+    if (!audioCtx || !trebleFilter || !analyser || !pannerNode || !trackGainNode) return;
+    try {
+      trebleFilter.disconnect();
+      if (splitterNode) splitterNode.disconnect();
+      if (channelMerger) channelMerger.disconnect();
+      if (invertGainNode) invertGainNode.disconnect();
+      pannerNode.disconnect();
+      trackGainNode.disconnect();
+    } catch {}
+
+    if (isVocalCancel) {
+      splitterNode = audioCtx.createChannelSplitter(2);
+      channelMerger = audioCtx.createChannelMerger(2);
+      invertGainNode = audioCtx.createGain();
+      invertGainNode.gain.value = -1;
+
+      trebleFilter.connect(splitterNode);
+      splitterNode.connect(channelMerger, 0, 0);
+      splitterNode.connect(channelMerger, 0, 1);
+      splitterNode.connect(invertGainNode, 1);
+      invertGainNode.connect(channelMerger, 0, 0);
+      invertGainNode.connect(channelMerger, 0, 1);
+      channelMerger.connect(pannerNode);
+    } else if (isMonoMix) {
+      splitterNode = audioCtx.createChannelSplitter(2);
+      channelMerger = audioCtx.createChannelMerger(2);
+      const gainL = audioCtx.createGain();
+      const gainR = audioCtx.createGain();
+      gainL.gain.value = 0.5;
+      gainR.gain.value = 0.5;
+
+      trebleFilter.connect(splitterNode);
+      splitterNode.connect(gainL, 0);
+      splitterNode.connect(gainR, 1);
+      gainL.connect(channelMerger, 0, 0);
+      gainR.connect(channelMerger, 0, 0);
+      gainL.connect(channelMerger, 0, 1);
+      gainR.connect(channelMerger, 0, 1);
+      channelMerger.connect(pannerNode);
+    } else {
+      trebleFilter.connect(pannerNode);
+    }
+
+    pannerNode.connect(trackGainNode);
+    trackGainNode.connect(analyser);
+    analyser.connect(audioCtx.destination);
+  }
+
+  function setupAmbientGenerator() {
+    if (!audioCtx || ambientSourceNode) return;
+    const bufferSize = audioCtx.sampleRate * 3;
+    const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      output[i] = Math.random() * 2 - 1;
+    }
+
+    const whiteNoise = audioCtx.createBufferSource();
+    whiteNoise.buffer = noiseBuffer;
+    whiteNoise.loop = true;
+
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 1200;
+
+    ambientGainNode = audioCtx.createGain();
+    ambientGainNode.gain.value = 0;
+
+    whiteNoise.connect(filter);
+    filter.connect(ambientGainNode);
+    ambientGainNode.connect(audioCtx.destination);
+    whiteNoise.start();
+    ambientSourceNode = { node: whiteNoise, filter };
+  }
+
+  function updateAmbientSound() {
+    const mode = ambientTypeSelect.value;
+    const vol = parseFloat(ambientVolSlider.value) || 0;
+    if (!audioCtx || mode === 'NONE') {
+      if (ambientGainNode) ambientGainNode.gain.value = 0;
+      return;
+    }
+    setupAmbientGenerator();
+    if (ambientSourceNode && ambientGainNode) {
+      if (mode === 'RAIN') {
+        ambientSourceNode.filter.type = 'bandpass';
+        ambientSourceNode.filter.frequency.value = 1400;
+      } else {
+        ambientSourceNode.filter.type = 'lowpass';
+        ambientSourceNode.filter.frequency.value = 650;
+      }
+      ambientGainNode.gain.value = vol;
+    }
+  }
+
+  ambientTypeSelect.addEventListener('change', () => {
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    updateAmbientSound();
+  });
+  ambientVolSlider.addEventListener('input', updateAmbientSound);
+
+  function initAudioGraph() {
+    if (!audioCtx) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AudioContextClass();
+      const source = audioCtx.createMediaElementSource(audio);
+
+      bassFilter = audioCtx.createBiquadFilter();
+      bassFilter.type = 'lowshelf';
+      bassFilter.frequency.value = 100;
+      bassFilter.gain.value = parseFloat(bassSlider.value);
+
+      midFilter = audioCtx.createBiquadFilter();
+      midFilter.type = 'peaking';
+      midFilter.frequency.value = 1000;
+      midFilter.Q.value = 1;
+      midFilter.gain.value = parseFloat(midSlider.value);
+
+      trebleFilter = audioCtx.createBiquadFilter();
+      trebleFilter.type = 'highshelf';
+      trebleFilter.frequency.value = 8000;
+      trebleFilter.gain.value = parseFloat(trebleSlider.value);
+
+      pannerNode = audioCtx.createStereoPanner();
+      pannerNode.pan.value = parseFloat(panSlider.value);
+
+      trackGainNode = audioCtx.createGain();
+      const curTrack = getCurrentTrack();
+      trackGainNode.gain.value = Math.pow(10, ((curTrack && curTrack.gainDb) || 0) / 20);
+
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 128;
+
+      source.connect(bassFilter);
+      bassFilter.connect(midFilter);
+      midFilter.connect(trebleFilter);
+      rebuildAudioRouting();
+      updateAmbientSound();
+
+      freqArray = new Uint8Array(analyser.frequencyBinCount);
+      timeDomainArray = new Uint8Array(analyser.fftSize);
+      drawVisualizer();
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }
+
+  vocalCancelBtn.addEventListener('click', () => {
+    isVocalCancel = !isVocalCancel;
+    if (isVocalCancel) isMonoMix = false;
+    vocalCancelBtn.textContent = `ボーカルキャンセル: ${isVocalCancel ? 'ON' : 'OFF'}`;
+    vocalCancelBtn.classList.toggle('active', isVocalCancel);
+    monoToggleBtn.textContent = `モノラル: ${isMonoMix ? 'ON' : 'OFF'}`;
+    monoToggleBtn.classList.toggle('active', isMonoMix);
+    rebuildAudioRouting();
+  });
+
+  panSlider.addEventListener('input', () => {
+    const p = parseFloat(panSlider.value);
+    const label = p === 0 ? '0.0 (中央)' : (p < 0 ? `${p.toFixed(1)} (左 L)` : `+${p.toFixed(1)} (右 R)`);
+    panVal.textContent = label;
+    if (pannerNode) pannerNode.pan.value = p;
+  });
+
+  monoToggleBtn.addEventListener('click', () => {
+    isMonoMix = !isMonoMix;
+    if (isMonoMix) isVocalCancel = false;
+    monoToggleBtn.textContent = `モノラル: ${isMonoMix ? 'ON' : 'OFF'}`;
+    monoToggleBtn.classList.toggle('active', isMonoMix);
+    vocalCancelBtn.textContent = `ボーカルキャンセル: ${isVocalCancel ? 'ON' : 'OFF'}`;
+    vocalCancelBtn.classList.toggle('active', isVocalCancel);
+    rebuildAudioRouting();
+  });
+
+  function applyEqValues(bass, mid, treble) {
+    bassSlider.value = bass;
+    midSlider.value = mid;
+    trebleSlider.value = treble;
+    bassVal.textContent = `${bass > 0 ? '+' : ''}${bass} dB`;
+    midVal.textContent = `${mid > 0 ? '+' : ''}${mid} dB`;
+    trebleVal.textContent = `${treble > 0 ? '+' : ''}${treble} dB`;
+
+    if (bassFilter) bassFilter.gain.value = bass;
+    if (midFilter) midFilter.gain.value = mid;
+    if (trebleFilter) trebleFilter.gain.value = treble;
+  }
+
+  [bassSlider, midSlider, trebleSlider].forEach(slider => {
+    slider.addEventListener('input', () => {
+      eqPresetBtns.forEach(b => b.classList.remove('active'));
+      applyEqValues(parseFloat(bassSlider.value), parseFloat(midSlider.value), parseFloat(trebleSlider.value));
+    });
+  });
+
+  eqPresetBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      eqPresetBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      applyEqValues(parseFloat(btn.dataset.bass), parseFloat(btn.dataset.mid), parseFloat(btn.dataset.treble));
+    });
+  });
+
+  fadeToggleBtn.addEventListener('click', () => {
+    isFadeEnabled = !isFadeEnabled;
+    fadeToggleBtn.textContent = `フェード: ${isFadeEnabled ? 'ON' : 'OFF'}`;
+    fadeToggleBtn.classList.toggle('active', isFadeEnabled);
+  });
+
+  function drawVisualizer() {
+    requestAnimationFrame(drawVisualizer);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const accentHex = getComputedStyle(document.body).getPropertyValue('--accent-color').trim() || '#e05a3e';
+    const accentHoverHex = getComputedStyle(document.body).getPropertyValue('--accent-hover').trim() || '#f06a4e';
+    const mode = vizModes[vizModeIndex];
+
+    if (!analyser) {
+      fsOverlay.style.setProperty('--beat-pulse', '0');
+      ctx.fillStyle = '#273040';
+      const barCount = 28;
+      const gap = 4;
+      const barW = (canvas.width - gap * (barCount - 1)) / barCount;
+      for (let i = 0; i < barCount; i++) {
+        ctx.fillRect(i * (barW + gap), canvas.height - 4, barW, 4);
+      }
+      return;
+    }
+
+    analyser.getByteFrequencyData(freqArray);
+    const bassEnergy = (freqArray[0] + freqArray[1] + freqArray[2]) / (3 * 255);
+    fsOverlay.style.setProperty('--beat-pulse', audio.paused ? '0' : bassEnergy.toFixed(3));
+
+    if (mode === 'WAVE') {
+      analyser.getByteTimeDomainData(timeDomainArray);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = accentHex;
+      ctx.beginPath();
+      const sliceWidth = canvas.width / timeDomainArray.length;
+      let x = 0;
+      for (let i = 0; i < timeDomainArray.length; i++) {
+        const y = ((timeDomainArray[i] / 128.0) * canvas.height) / 2;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+        x += sliceWidth;
+      }
+      ctx.lineTo(canvas.width, canvas.height / 2);
+      ctx.stroke();
+    } else if (mode === 'RING') {
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      const baseR = 9;
+      const count = 28;
+      for (let i = 0; i < count; i++) {
+        const val = freqArray[i % freqArray.length] / 255;
+        const angle = (i / count) * Math.PI * 2;
+        const len = 2 + val * 8;
+        ctx.strokeStyle = val > 0.6 ? accentHoverHex : accentHex;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(angle) * baseR, cy + Math.sin(angle) * baseR);
+        ctx.lineTo(cx + Math.cos(angle) * (baseR + len), cy + Math.sin(angle) * (baseR + len));
+        ctx.stroke();
+      }
+    } else if (mode === 'PARTICLES') {
+      ctx.fillStyle = accentHoverHex;
+      for (const p of particles) {
+        p.x += p.vx * (0.6 + bassEnergy * 2.2);
+        p.y += p.vy * (0.6 + bassEnergy * 2.2);
+        if (p.x < 0) p.x = canvas.width;
+        if (p.x > canvas.width) p.x = 0;
+        if (p.y < 0) p.y = canvas.height;
+        if (p.y > canvas.height) p.y = 0;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * (0.8 + bassEnergy), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else {
+      const barCount = Math.min(36, freqArray.length);
+      const gap = 3;
+      const barW = (canvas.width - gap * (barCount - 1)) / barCount;
+      for (let i = 0; i < barCount; i++) {
+        const val = freqArray[i] / 255;
+        const barH = Math.max(3, val * (canvas.height - 4));
+        const x = i * (barW + gap);
+        const y = canvas.height - barH;
+        ctx.fillStyle = val > 0.65 ? accentHoverHex : accentHex;
+        ctx.fillRect(x, y, barW, barH);
+      }
+    }
+  }
+
+  function playAudio() {
+    if (tracks.length === 0) return;
+    if (!currentTrackId) loadTrackById(tracks[0].id);
+    initAudioGraph();
+    audio.play().then(() => {
+      playPauseBtn.textContent = '一時停止';
+      fsPlayPauseBtn.textContent = '一時停止';
+      miniPlayPauseBtn.textContent = '一時停止';
+      if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+      const cur = getCurrentTrack();
+      if (cur) recordPlayHistory(cur);
+      syncLyricsSmoothly(audio.currentTime || 0, true);
+    }).catch(() => {});
+  }
+
+  function pauseAudio() {
+    audio.pause();
+    playPauseBtn.textContent = '再生';
+    fsPlayPauseBtn.textContent = '再生';
+    miniPlayPauseBtn.textContent = '再生';
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+    coverArt.classList.remove('ambient-motion');
+  }
+
+  playPauseBtn.addEventListener('click', () => {
+    if (audio.paused) playAudio();
+    else pauseAudio();
+  });
+
+  function enqueueNext(trackId) {
+    playQueue.push(trackId);
+    updateQueueUI();
+  }
+
+  function updateQueueUI() {
+    if (playQueue.length === 0) queueBanner.style.display = 'none';
+    else {
+      queueBanner.style.display = 'flex';
+      queueCount.textContent = playQueue.length;
+    }
+  }
+
+  clearQueueBtn.addEventListener('click', () => {
+    playQueue = [];
+    updateQueueUI();
+  });
+
+  function clearSleepTimer() {
+    if (sleepIntervalId) {
+      clearInterval(sleepIntervalId);
+      sleepIntervalId = null;
+    }
+    sleepEndTime = null;
+    sleepTimerSelect.value = '0';
+    timerBanner.style.display = 'none';
+  }
+
+  sleepTimerSelect.addEventListener('change', () => {
+    const minutes = parseInt(sleepTimerSelect.value, 10);
+    if (sleepIntervalId) {
+      clearInterval(sleepIntervalId);
+      sleepIntervalId = null;
+    }
+    if (!minutes) {
+      clearSleepTimer();
+      return;
+    }
+    sleepEndTime = Date.now() + minutes * 60 * 1000;
+    timerBanner.style.display = 'flex';
+    updateSleepTimerDisplay();
+    sleepIntervalId = setInterval(() => {
+      const diffMs = sleepEndTime - Date.now();
+      if (diffMs <= 0) {
+        pauseAudio();
+        clearSleepTimer();
+      } else {
+        updateSleepTimerDisplay();
+      }
+    }, 1000);
+  });
+
+  function updateSleepTimerDisplay() {
+    if (!sleepEndTime) return;
+    timerRemaining.textContent = formatTime(Math.max(0, Math.ceil((sleepEndTime - Date.now()) / 1000)));
+  }
+
+  cancelTimerBtn.addEventListener('click', clearSleepTimer);
+
+  function nextTrack() {
+    if (tracks.length === 0) return;
+    while (playQueue.length > 0) {
+      const nextId = playQueue.shift();
+      updateQueueUI();
+      if (tracks.some(t => t.id === nextId)) {
+        loadTrackById(nextId);
+        playAudio();
+        return;
+      }
+    }
+    const pool = getFilteredAndSortedTracks();
+    const activePool = pool.length > 0 ? pool : tracks;
+    const currentPoolIdx = activePool.findIndex(t => t.id === currentTrackId);
+    const nextObj = isShuffle
+      ? activePool[Math.floor(Math.random() * activePool.length)]
+      : activePool[currentPoolIdx >= 0 ? (currentPoolIdx + 1) % activePool.length : 0];
+    if (nextObj) {
+      loadTrackById(nextObj.id);
+      playAudio();
+    }
+  }
+
+  function prevTrack() {
+    if (tracks.length === 0) return;
+    if (audio.currentTime > 3) {
+      audio.currentTime = 0;
+      return;
+    }
+    const pool = getFilteredAndSortedTracks();
+    const activePool = pool.length > 0 ? pool : tracks;
+    const currentPoolIdx = activePool.findIndex(t => t.id === currentTrackId);
+    const prevIdx = currentPoolIdx >= 0 ? (currentPoolIdx - 1 + activePool.length) % activePool.length : 0;
+    loadTrackById(activePool[prevIdx].id);
+    playAudio();
+  }
+
+  nextBtn.addEventListener('click', nextTrack);
+  prevBtn.addEventListener('click', prevTrack);
+
+  shuffleBtn.addEventListener('click', () => {
+    isShuffle = !isShuffle;
+    shuffleBtn.classList.toggle('active', isShuffle);
+  });
+
+  function updateRepeatUI() {
+    const labels = ['リピート: OFF', 'リピート: 全曲', 'リピート: 1曲'];
+    repeatBtn.textContent = labels[repeatMode];
+    repeatBtn.classList.toggle('active', repeatMode !== 0);
+  }
+
+  repeatBtn.addEventListener('click', () => {
+    repeatMode = (repeatMode + 1) % 3;
+    updateRepeatUI();
+  });
+
+  audio.addEventListener('ended', () => {
+    if (repeatMode === 2) {
+      audio.currentTime = 0;
+      playAudio();
+    } else if (playQueue.length > 0 || repeatMode === 1 || isShuffle) {
+      nextTrack();
+    } else {
+      const pool = getFilteredAndSortedTracks();
+      const activePool = pool.length > 0 ? pool : tracks;
+      const idx = activePool.findIndex(t => t.id === currentTrackId);
+      if (idx >= 0 && idx < activePool.length - 1) nextTrack();
+      else pauseAudio();
+    }
+  });
+
+  volumeBar.addEventListener('input', () => {
+    lastVolume = parseFloat(volumeBar.value);
+    audio.volume = lastVolume;
+    audio.muted = audio.volume === 0;
+    updateMuteUI();
+  });
+
+  muteBtn.addEventListener('click', () => {
+    if (!audio.muted && lastVolume > 0) {
+      audio.muted = true;
+      volumeBar.value = 0;
+    } else {
+      audio.muted = false;
+      const targetVol = lastVolume || 0.8;
+      audio.volume = targetVol;
+      volumeBar.value = targetVol;
+    }
+    updateMuteUI();
+  });
+
+  function updateMuteUI() {
+    muteBtn.textContent = (audio.muted || parseFloat(volumeBar.value) === 0) ? '消音中' : '消音';
+  }
+
+  function applyPlaybackRateAndPitch() {
+    const rate = speeds[speedIndex];
+    const semi = semitoneSteps[semitoneIndex];
+    const pitchFactor = Math.pow(2, semi / 12);
+    audio.playbackRate = Math.max(0.25, Math.min(4, rate * pitchFactor));
+    speedBtn.textContent = `${rate.toFixed(2).replace(/\.00$/, '.0')}x`;
+    pitchBtn.textContent = `キー: ${semi > 0 ? '+' + semi : semi}`;
+  }
+
+  speedBtn.addEventListener('click', () => {
+    speedIndex = (speedIndex + 1) % speeds.length;
+    applyPlaybackRateAndPitch();
+  });
+
+  pitchBtn.addEventListener('click', () => {
+    semitoneIndex = (semitoneIndex + 1) % semitoneSteps.length;
+    applyPlaybackRateAndPitch();
+  });
+
+  resetRatePitchBtn.addEventListener('click', () => {
+    speedIndex = 1;
+    semitoneIndex = 6;
+    applyPlaybackRateAndPitch();
+  });
+
+  likeBtn.addEventListener('click', () => {
+    const track = getCurrentTrack();
+    if (!track) return;
+    track.liked = !track.liked;
+    saveTrackMeta(track);
+    updateLikeUI();
+    renderPlaylist();
+    renderStats();
+  });
+
+  function updateLikeUI() {
+    const track = getCurrentTrack();
+    if (!track || !track.liked) {
+      likeBtn.textContent = 'お気に入り';
+      likeBtn.classList.remove('liked');
+    } else {
+      likeBtn.textContent = '登録済み';
+      likeBtn.classList.add('liked');
+    }
+  }
+
+  searchInput.addEventListener('input', renderPlaylist);
+  folderFilterSelect.addEventListener('change', renderPlaylist);
+  sortSelect.addEventListener('change', renderPlaylist);
+
+  favFilterBtn.addEventListener('click', () => {
+    onlyFavorites = !onlyFavorites;
+    favFilterBtn.classList.toggle('active', onlyFavorites);
+    renderPlaylist();
+  });
+
+  clearAllTracksBtn.addEventListener('click', () => {
+    if (tracks.length === 0) return;
+    pauseAudio();
+    tracks.forEach(t => URL.revokeObjectURL(t.url));
+    folderCoverMap.forEach(url => URL.revokeObjectURL(url));
+    folderCoverMap.clear();
+    tracks = [];
+    playQueue = [];
+    currentTrackId = null;
+    abPointA = null;
+    abPointB = null;
+    isAbLoop = false;
+    updateAbUI();
+    audio.removeAttribute('src');
+    trackFolder.textContent = 'フォルダ未選択';
+    trackTitle.textContent = '曲が選択されていません';
+    trackStatus.textContent = '0 / 0 曲';
+    currentTimeEl.textContent = '0:00';
+    durationEl.textContent = '0:00';
+    fsCurrentTime.textContent = '0:00';
+    fsDuration.textContent = '0:00';
+    seekBar.value = 0;
+    fsSeekBar.value = 0;
+    renderCoverArt(null);
+    updateLikeUI();
+    updateQueueUI();
+    updateFolderFilterOptions();
+    updateTagFilterOptions();
+    renderLyrics(null);
+    renderBookmarks();
+    renderPlaylist();
+    renderAlbumGrid();
+    renderStats();
+  });
+
+  function toggleTrackInCurrentCustomPlaylist(trackName) {
+    const selectedPl = customPlaylistSelect.value;
+    if (selectedPl === 'ALL_TRACKS' || selectedPl === '__RECENT__') {
+      const names = Object.keys(customPlaylists);
+      if (names.length === 0) {
+        alert('先に「新しいリスト名」を入力してマイリストを作成してください。');
+        return;
+      }
+      const targetName = names[names.length - 1];
+      customPlaylists[targetName] = customPlaylists[targetName] || [];
+      if (!customPlaylists[targetName].includes(trackName)) customPlaylists[targetName].push(trackName);
+      persistAllMeta();
+      refreshCustomPlaylistSelect();
+      renderPlaylist();
+      return;
+    }
+    const arr = customPlaylists[selectedPl] || [];
+    const idx = arr.indexOf(trackName);
+    if (idx >= 0) arr.splice(idx, 1);
+    else arr.push(trackName);
+    customPlaylists[selectedPl] = arr;
+    persistAllMeta();
+    refreshCustomPlaylistSelect();
+    customPlaylistSelect.value = selectedPl;
+    renderPlaylist();
+  }
+
+  function renderPlaylist() {
+    const filtered = getFilteredAndSortedTracks();
+    playlistCountText.textContent = `${filtered.length} / ${tracks.length} 曲表示中`;
+
+    if (filtered.length === 0) {
+      playlistList.innerHTML = `<div class="lyrics-empty">表示できる曲がありません</div>`;
+      return;
+    }
+
+    const selectedPl = customPlaylistSelect.value;
+    const isCustomMode = selectedPl !== 'ALL_TRACKS' && selectedPl !== '__RECENT__';
+
+    playlistList.innerHTML = filtered.map((track, idx) => {
+      const isPlaying = track.id === currentTrackId;
+      const hasLyrics = track.parsedLines && track.parsedLines.some(l => !l.isEllipsisMarker && l.text);
+      const isInPl = isCustomMode && (customPlaylists[selectedPl] || []).includes(track.name);
+      const countText = (track.playCount || 0) > 0 ? ` ・ 再生${track.playCount}回` : '';
+      const tagText = (track.tags && track.tags.length > 0) ? ` ・ ${track.tags.map(t => '#' + t).join(' ')}` : '';
+
+      return `
+        <div class="track-row ${isPlaying ? 'playing' : ''}" data-id="${track.id}" draggable="${isCustomMode ? 'true' : 'false'}">
+          <div class="track-row-main">
+            <div class="track-row-title">${idx + 1}. ${escapeHtml(track.name)}</div>
+            <div class="track-row-meta">${escapeHtml(track.folder)}${countText}${tagText}${isPlaying ? ' ・ 再生中' : ''}${hasLyrics ? ' ・ 歌詞あり' : ''}</div>
+          </div>
+          <div class="row-actions">
+            <button type="button" class="mini-btn queue-btn" data-queue-id="${track.id}">次へ予約</button>
+            <button type="button" class="mini-btn pl-btn ${isInPl ? 'in-pl' : ''}" data-pl-name="${escapeHtml(track.name)}">
+              ${!isCustomMode ? 'リスト追加' : (isInPl ? 'リスト済' : '+追加')}
+            </button>
+            <button type="button" class="mini-btn like-row-btn ${track.liked ? 'liked' : ''}" data-like-id="${track.id}">
+              ${track.liked ? '登録済' : 'お気に入り'}
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    playlistList.querySelectorAll('.track-row').forEach(row => {
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.mini-btn')) return;
+        loadTrackById(row.dataset.id);
+        playAudio();
+      });
+
+      if (isCustomMode) {
+        row.addEventListener('dragstart', () => {
+          draggedTrackId = row.dataset.id;
+        });
+        row.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          row.classList.add('drag-over');
+        });
+        row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+        row.addEventListener('drop', (e) => {
+          e.preventDefault();
+          row.classList.remove('drag-over');
+          if (!draggedTrackId || draggedTrackId === row.dataset.id) return;
+          const srcTrack = tracks.find(t => t.id === draggedTrackId);
+          const dstTrack = tracks.find(t => t.id === row.dataset.id);
+          if (!srcTrack || !dstTrack) return;
+
+          const order = [...(customPlaylists[selectedPl] || [])];
+          const fromIdx = order.indexOf(srcTrack.name);
+          const toIdx = order.indexOf(dstTrack.name);
+          if (fromIdx !== -1 && toIdx !== -1) {
+            order.splice(fromIdx, 1);
+            order.splice(toIdx, 0, srcTrack.name);
+            customPlaylists[selectedPl] = order;
+            persistAllMeta();
+            renderPlaylist();
+          }
+          draggedTrackId = null;
+        });
+      }
+    });
+
+    playlistList.querySelectorAll('.queue-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        enqueueNext(btn.dataset.queueId);
+      });
+    });
+
+    playlistList.querySelectorAll('.pl-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleTrackInCurrentCustomPlaylist(btn.dataset.plName);
+      });
+    });
+
+    playlistList.querySelectorAll('.like-row-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const target = tracks.find(t => t.id === btn.dataset.likeId);
+        if (!target) return;
+        target.liked = !target.liked;
+        saveTrackMeta(target);
+        if (target.id === currentTrackId) updateLikeUI();
+        renderPlaylist();
+        renderStats();
+      });
+    });
+  }
+
+  audio.addEventListener('timeupdate', () => {
+    if (!isNaN(audio.duration) && audio.duration > 0) {
+      if (isAbLoop && abPointA !== null && abPointB !== null && audio.currentTime >= abPointB) {
+        audio.currentTime = abPointA;
+      }
+
+      if (isFadeEnabled && !audio.muted) {
+        const remain = audio.duration - audio.currentTime;
+        const elapsed = audio.currentTime;
+        let factor = 1;
+        if (elapsed < 2.5) factor = Math.min(factor, elapsed / 2.5);
+        if (remain < 3.0) factor = Math.min(factor, Math.max(0, remain / 3.0));
+        audio.volume = Math.max(0, Math.min(1, lastVolume * factor));
+      } else if (!audio.muted) {
+        audio.volume = lastVolume;
+      }
+
+      seekBar.value = (audio.currentTime / audio.duration) * 100;
+      fsSeekBar.value = seekBar.value;
+      currentTimeEl.textContent = formatTime(audio.currentTime);
+      fsCurrentTime.textContent = currentTimeEl.textContent;
+      syncLyricsSmoothly(audio.currentTime, false);
+    }
+  });
+
+  audio.addEventListener('loadedmetadata', () => {
+    durationEl.textContent = formatTime(audio.duration);
+    fsDuration.textContent = durationEl.textContent;
+  });
+
+  function seekToPercent(pct) {
+    if (!isNaN(audio.duration) && audio.duration > 0) {
+      audio.currentTime = (pct / 100) * audio.duration;
+      syncLyricsSmoothly(audio.currentTime, true);
+    }
+  }
+
+  seekBar.addEventListener('input', () => {
+    fsSeekBar.value = seekBar.value;
+    seekToPercent(parseFloat(seekBar.value));
+  });
+
+  fsSeekBar.addEventListener('input', () => {
+    seekBar.value = fsSeekBar.value;
+    seekToPercent(parseFloat(fsSeekBar.value));
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (!introOverlay.classList.contains('hidden')) {
+      if (e.code === 'Escape' || e.code === 'Space') {
+        e.preventDefault();
+        closeIntro();
+      }
+      return;
+    }
+    if (guideModal.classList.contains('open')) {
+      if (e.code === 'Escape') guideModal.classList.remove('open');
+      return;
+    }
+    if (e.code === 'Escape' && fsOverlay.classList.contains('open')) {
+      e.preventDefault();
+      closeFullscreenLyrics();
+      return;
+    }
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (audio.paused) playAudio();
+      else pauseAudio();
+    } else if (e.code === 'KeyF') {
+      e.preventDefault();
+      if (fsOverlay.classList.contains('open')) closeFullscreenLyrics();
+      else openFullscreenLyrics();
+    } else if (e.code === 'ArrowRight' && !isNaN(audio.duration)) {
+      audio.currentTime = Math.min(audio.duration, audio.currentTime + 5);
+    } else if (e.code === 'ArrowLeft' && !isNaN(audio.duration)) {
+      audio.currentTime = Math.max(0, audio.currentTime - 5);
+    } else if (e.code === 'KeyM') {
+      muteBtn.click();
+    }
+  });
+
+  function formatTime(seconds) {
+    if (isNaN(seconds) || !isFinite(seconds)) return '0:00';
+    const min = Math.floor(seconds / 60);
+    const sec = Math.floor(seconds % 60);
+    return `${min}:${sec < 10 ? '0' : ''}${sec}`;
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  updateRepeatUI();
+  updateAbUI();
+  updateOffsetBadge();
+  applyPlaybackRateAndPitch();
+  drawVisualizer();
+  renderBookmarks();
+  renderPlaylist();
+  renderAlbumGrid();
+  renderStats();
+  smoothLyricsLoop();
+  startIntroPlayback(false);
+</script>
+</body>
+</html>
